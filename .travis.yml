@@ -1,0 +1,8 @@
+sudo: required
+services:
+  - docker
+script:
+  - docker build -t fwlint_legacy .
+  - chmod -R go=u .
+  - umask 0000
+  - docker run -it --rm -v $PWD:/home/fwlint/fwlint fwlint_legacy ./test

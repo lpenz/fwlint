@@ -1,0 +1,37 @@
+
+Profile = False
+
+import glob
+import os
+import re
+import sets
+
+execfile(os.path.join(os.environ['SCONSTOOLS'], 'utils.py'))
+
+env = Env()
+
+env['HASKELLPATH'] = [os.getcwd(), '/home/lpenz/mestrado/hplib']
+
+defaultTargets = []
+
+if Profile:
+    env['HASKELLFLAGS'] = env['HASKELLFLAGS'] + ' -prof -auto-all'
+
+env['HASKELLFLAGS'] = env['HASKELLFLAGS'] + ' -XOverlappingInstances -XIncoherentInstances -fno-warn-orphans'
+
+hsList = []
+
+for filename in glob.glob('*.hs'):
+    if filename == 'quickchecker.hs':
+        continue
+    node = env.File(filename)
+    contents = node.get_contents()
+    hsList.append(filename)
+    env.HASKELL(filename)
+
+env.Command('quickchecker.hs', hsList, 'haskelltester $TARGET $SOURCES')
+
+env.HASKELL_EXECUTABLE('quickchecker.hs')
+
+env.Command('test_results.txt', 'quickchecker', '${SOURCE.dir}/${SOURCE.file} | tee $TARGET')
+

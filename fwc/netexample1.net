@@ -1,0 +1,32 @@
+[
+{
+filter f1,
+[{10.1.0.1/24}, {10.100.12.1/24}, {internet}],
+[
+{rule r1_0__3_0, src 10.1.0.0/24, dst 10.3.0.0/24:80, Accept},
+{rule internet1, src 10.1.0.0/24, dst 200.248.240.5:80, Accept},
+{rule default, Deny}
+]
+},
+{
+filter f2,
+[{10.2.0.1/24}, {10.2.1.1/24}, {10.100.12.2/24}, {10.100.23.2/24}],
+[
+{rule r2_0__2_1, src 10.2.0.0/24, dst 10.2.1.0/24:80, Accept},
+{rule r1_0__3_0, src 10.1.0.0/24, dst 10.3.0.0/24:80, Accept},
+{rule r100_12__3_0, src 10.100.12.0/24, dst 10.3.0.0/24:80, Accept},
+{rule internet1, src 10.1.0.0/24, dst 200.248.240.5:80, Accept},
+{rule default, Deny}
+]
+},
+{
+filter f3, [{10.3.0.1/24}, {10.100.23.3/24}, {internet}],
+[
+{rule r1_0__3_0, src 10.1.0.1/24, dst 10.3.0.1/24:80, Accept},
+{rule r100_12__3_0, src 10.100.12.0/24, dst 10.3.0.0/24:80, Accept},
+{rule internet1, src 10.1.0.0/24, dst 200.248.240.5:80, Accept},
+{rule default, Deny}
+]
+},
+]
+

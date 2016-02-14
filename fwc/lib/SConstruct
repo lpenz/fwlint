@@ -1,0 +1,8 @@
+
+import os
+
+execfile(os.path.join(os.environ['SCONSTOOLS'], 'utils.py'))
+
+env = Env()
+env.SConscript('SConscript')
+

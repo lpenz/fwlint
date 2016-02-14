@@ -1,0 +1,41 @@
+
+Profile = False
+
+import glob
+import os
+import re
+import sets
+
+execfile(os.path.join(os.environ['SCONSTOOLS'], 'utils.py'))
+
+env = Env()
+env.SConscript('lib/SConscript')
+#env.SConscript('../hplib/SConscript')
+
+env['HASKELLPATH'] = [os.getcwd(), 'lib', '/home/lpenz/mestrado/hplib']
+
+defaultTargets = []
+
+if Profile:
+    env['HASKELLFLAGS'] = env['HASKELLFLAGS'] + ' -prof -auto-all -DPROFILE'
+
+env['HASKELLFLAGS'] = env['HASKELLFLAGS'] + ' -XOverlappingInstances -XIncoherentInstances'
+
+
+for filename in glob.glob('*.hs'):
+    env.HASKELL(filename)
+
+def utilbuild(target, source, util):
+    env.Command(target, source, util + ' < $SOURCE > $TARGET')
+    env.Depends(target, util)
+
+for filename in glob.glob('*.fw'):
+    basename = newext(filename, '')
+    #utilbuild(basename + '_tree.dot', filename, './fw_tree_dot')
+    #utilbuild(basename + '.svg', filename, './fw_rulesip_svg')
+
+for filename in glob.glob('*.net'):
+    basename = newext(filename, '')
+    #utilbuild(basename + '.neato', filename, './net_neato')
+    #utilbuild(basename + '_equivs.dot', filename, './net_equivs_dot')
+

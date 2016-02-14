@@ -1,0 +1,8 @@
+[
+{rule conflictWithR3, src 1.0.3.0/24 , Deny},
+{rule redundant, src 1.0.1.0/24 , dst 2.0.1.0/24 , Deny},
+{rule r2 , src 1.0.0.0/16 , dst 2.0.1.0/24 , Deny},
+{rule r3 , src 1.0.0.0/16 , dst 2.0.0.0/16 , Accept},
+{rule invisible, src 1.0.0.0/24 , dst 2.0.0.0/24 , Deny},
+{rule default, Deny},
+]

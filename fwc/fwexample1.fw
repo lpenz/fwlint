@@ -1,0 +1,12 @@
+[
+{rule r1 , src 1.0.3.40/32 , dst 1.0.1.85/28 , Deny},
+{rule r2 , src 1.0.3.0/24  , dst 1.0.1.85/24 , Accept},
+{rule r3 , src 1.0.0.0/16  , dst 1.0.1.87/32 , Accept},
+{rule r4 , src 1.0.2.2/32  , dst 1.0.0.0/16  , Deny},
+{rule r5 , src 1.0.1.20/32 , dst 1.0.8.0/16  , Deny},
+{rule r6 , src 1.0.1.0/24  , dst 1.0.8.40/23 , Deny},
+{rule r7 , src 1.0.1.0/24  , dst 1.0.8.0/16  , Accept},
+{rule r8 , src 1.0.0.0/16  , dst 1.0.8.40/32 , Accept},
+{rule r9 , src 1.0.3.0/24  , dst 1.0.8.0/24  , Accept},
+{rule r10, src 0.0.0.0/0   , dst 0.0.0.0/0   , Deny},
+]

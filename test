@@ -2,3 +2,8 @@
 
 set -e -x
 
+# cabal-install
+export SCONSTOOLS=$HOME/fwlint/sconstools
+cd hplib
+scons
+

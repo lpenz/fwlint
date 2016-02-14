@@ -1,4 +1,7 @@
 
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE FlexibleInstances #-}
+
 module Tuple where
 
 e1of3 :: (a, b, c) -> a

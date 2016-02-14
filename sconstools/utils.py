@@ -6,7 +6,7 @@ import glob
 import SCons
 import SCons.Tool
 
-Decider('MD5-timestamp')
+#Decider('MD5-timestamp')
 
 sconstoolsPath = os.environ['SCONSTOOLS']
 

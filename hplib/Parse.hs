@@ -1,4 +1,6 @@
 
+{-# LANGUAGE RankNTypes #-}
+
 module Parse where
 
 import qualified Text.ParserCombinators.Parsec as P

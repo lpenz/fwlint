@@ -2,6 +2,7 @@
 {-# LANGUAGE OverlappingInstances #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE TypeSynonymInstances #-}
 
 module Doc (Able, repr, name, nestup, punct, stru, strucat, strusep, struhcat, showrepr, showname, showpres, Existential, brace, module Text.PrettyPrint) where
 

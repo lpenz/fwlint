@@ -1,4 +1,6 @@
 
+{-# LANGUAGE FlexibleInstances #-}
+
 module Ip where
 import Data.Bits
 
@@ -95,7 +97,6 @@ instance Arbitrary Addr where
 			ip3  <- choose (0, 255)
 			ip4  <- choose (0, 255)
 			return $ makeAddr ip1 ip2 ip3 ip4
-	coarbitrary = undefined
 #endif
 
 proxyAddr::Addr
@@ -104,10 +105,10 @@ proxyAddr = error "Do not use"
 getIpComponents :: Addr -> (Int, Int, Int, Int)
 getIpComponents (Addr ip) = (ip1, ip2, ip3, ip4)
 	where
-		ip1 = fromIntegral $ (shiftR ip 24) .&. 0xff
-		ip2 = fromIntegral $ (shiftR ip 16) .&. 0xff
-		ip3 = fromIntegral $ (shiftR ip 8) .&. 0xff
-		ip4 = fromIntegral $ (shiftR ip 0) .&. 0xff
+		ip1 = fromIntegral $ (shiftR ip 24) Data.Bits..&. 0xff
+		ip2 = fromIntegral $ (shiftR ip 16) Data.Bits..&. 0xff
+		ip3 = fromIntegral $ (shiftR ip 8) Data.Bits..&. 0xff
+		ip4 = fromIntegral $ (shiftR ip 0) Data.Bits..&. 0xff
 
 convertIpToNum::Addr -> Integer
 convertIpToNum (Addr ip) = ip
@@ -218,7 +219,7 @@ getIpNetMaxIp :: Addr -> Int -> Addr
 getIpNetMaxIp (Addr ipnum) pl = Addr ipnummax
 	where
 		plenint = fromIntegral $ pl
-		ipnummax = (shiftR ((shiftL 0xffffffff plenint) .&. 0xffffffff) plenint) .|. ipnum
+		ipnummax = (shiftR ((shiftL 0xffffffff plenint) Data.Bits..&. 0xffffffff) plenint) .|. ipnum
 
 getIpNetRange :: Addr -> Int -> Range.Range Addr
 getIpNetRange ipn pl = Range.Range (getIpNetMinIp ipn pl) (getIpNetMaxIp ipn pl)
@@ -258,7 +259,6 @@ instance Arbitrary Port where
 	arbitrary = do
 		p <- choose (0, 65535)
 		return $ Port p
-	coarbitrary = undefined
 #endif
 
 validPort :: Port -> Bool
@@ -295,7 +295,6 @@ instance Arbitrary Protocol where
 	arbitrary = do
 		p <- choose (0, 2)
 		return $ Protocol p
-	coarbitrary = undefined
 #endif
 
 instance Parse.Parseable Protocol where

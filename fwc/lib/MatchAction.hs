@@ -1,4 +1,6 @@
 
+{-# LANGUAGE FlexibleInstances #-}
+
 module MatchAction (module Match, module Action) where
 
 import Monad

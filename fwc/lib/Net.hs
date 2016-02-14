@@ -1,4 +1,6 @@
 
+{-# LANGUAGE FlexibleInstances #-}
+
 module Net where
 
 import Test.QuickCheck
@@ -56,7 +58,6 @@ instance Arbitrary Interface where
 		ip <- arbitrary
 		pl <- choose (0, 32)
 		return $ Interface ip (getNetAtom "net" ip pl)
-	coarbitrary = undefined
 
 ------
 
@@ -140,7 +141,6 @@ instance Arbitrary Device where
 		interfaces <- arbitrary
 		rules <- arbitrary
 		oneof [return $ Filter "test" interfaces rules, return $ Router "test" interfaces]
-	coarbitrary = undefined
 
 checkDevices :: [Device] -> Bool
 checkDevices devs = rv

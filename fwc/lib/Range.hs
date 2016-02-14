@@ -1,4 +1,7 @@
 
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
+
 module Range where
 
 #ifndef PROFILE
@@ -229,7 +232,6 @@ instance (Arbitrary a, Random a, Num a) => Arbitrary (Range a) where
 			i  <- choose (0, 255)
 			f  <- choose (0, 255)
 			return $ Range i f
-	coarbitrary = undefined
 
 prop_Range_OfEqual :: Range Int -> Bool
 prop_Range_OfEqual r = intersectionOfRange r r == Just r && isInside r r == False && isAnyInside r r == False

@@ -10,7 +10,7 @@ execfile(os.path.join(os.environ['SCONSTOOLS'], 'utils.py'))
 
 env = Env()
 
-env['HASKELLPATH'] = [os.getcwd(), '/home/lpenz/mestrado/hplib']
+env['HASKELLPATH'] = [os.getcwd(), '../../hplib']
 
 defaultTargets = []
 
@@ -29,7 +29,7 @@ for filename in glob.glob('*.hs'):
     hsList.append(filename)
     env.HASKELL(filename)
 
-env.Command('quickchecker.hs', hsList, 'haskelltester $TARGET $SOURCES')
+env.Command('quickchecker.hs', hsList, '../haskelltester $TARGET $SOURCES')
 
 env.HASKELL_EXECUTABLE('quickchecker.hs')
 

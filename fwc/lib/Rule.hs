@@ -44,7 +44,6 @@ instance Arbitrary Rule where
 		ma <- arbitrary
 		act <- arbitrary
 		return (Rule "rule" ma act)
-	coarbitrary = undefined
 
 getMatch :: Rule -> MatchAction.Match
 getMatch (Rule _ m _) = m

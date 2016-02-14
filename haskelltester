@@ -1,0 +1,72 @@
+#!/bin/bash
+
+set -e
+
+TARGET=$1
+shift
+
+TMP=$(tempfile)
+
+trap "rm -f $TMP $TARGET" ERR
+
+echo "module Main where" > $TARGET
+
+echo -n > $TMP
+
+for file in "$@"; do
+	if $(grep -q '^prop_[^ =]\+' "$file"); then
+		echo "import qualified $(basename $file .hs)" >> $TMP
+	fi
+	if $(grep -q '^assert_[^ =]\+.*:: *Bool$' "$file"); then
+		echo "import qualified $(basename $file .hs)" >> $TMP
+	fi
+done
+
+sort -u $TMP >> $TARGET
+
+cat >> $TARGET <<END
+import Test.QuickCheck
+import Text.Printf
+
+len :: Int
+len = 1 + (maximum $ map length [
+	""
+END
+
+echo -n > $TMP
+
+for file in "$@"; do
+	for func in $(sed -nr 's/^(prop_[^ =]+).*/\1/p' "$file"); do
+		echo -e "\t,\"$func\"" >> $TMP
+	done
+	for func in $(sed -nr 's/^(assert_[^ =]+).*:: *Bool$/\1/p' "$file"); do
+		echo -e "\t,\"$func\"" >> $TMP
+	done
+done
+
+sort -u $TMP >> $TARGET
+
+cat >> $TARGET <<END
+	])
+
+main :: IO ()
+main = do
+END
+
+echo -n > $TMP
+
+INI="\tputStr (printf (\"%-\" ++ show len ++ \"s\") "
+for file in "$@"; do
+	for func in $(sed -nr 's/^(prop_[^ =]+).*/\1/p' "$file"); do
+		echo -e "$INI \"$func\") >> quickCheck $(basename $file .hs).$func" >> $TMP
+	done
+	for func in $(sed -nr 's/^(assert_[^ =]+).*:: *Bool$/\1/p' "$file"); do
+		echo -e "$INI \"$func\") >> putStrLn (if $(basename $file .hs).$func then \"OK.\" else \"FAIL!\")" >> $TMP
+	done
+done
+
+sort -u $TMP >> $TARGET
+
+echo >> $TARGET
+rm -f $TMP
+

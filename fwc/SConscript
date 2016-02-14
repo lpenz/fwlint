@@ -12,7 +12,7 @@ env = Env()
 env.SConscript('lib/SConscript')
 #env.SConscript('../hplib/SConscript')
 
-env['HASKELLPATH'] = [os.getcwd(), 'lib', '/home/lpenz/mestrado/hplib']
+env['HASKELLPATH'] = [os.getcwd(), 'lib', '../hplib']
 
 defaultTargets = []
 

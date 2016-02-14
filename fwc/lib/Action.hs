@@ -18,7 +18,6 @@ instance Doc.Able Action
 #ifndef PROFILE
 instance Arbitrary Action where
 	arbitrary = oneof [return Accept, return Deny]
-	coarbitrary = undefined
 #endif
 
 instance Parse.Parseable Action where

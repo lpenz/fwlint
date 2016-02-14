@@ -122,7 +122,6 @@ instance Arbitrary Match where
 			ad <- lrange arbitrary arbitrary
 			pd <- lrange arbitrary arbitrary
 			return $ Match pr as ps ad pd
-	coarbitrary = undefined
 #endif
 
 ------------------------------------------------------------------------------

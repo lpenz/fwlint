@@ -1,0 +1,9 @@
+#!/bin/sh
+
+echo
+echo '\begin{tabular}{ll}'
+sed -n 's@^alias \+\([0-9a-zA-Z_]\+\)[	 ]*\([0-9./]\+\)@{\\tt{\1}} \& \2 \\\\@p' 
+# | sed 'p;s/.*//p'
+echo '\end{tabular}'
+echo
+

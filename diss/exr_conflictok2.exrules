@@ -1,0 +1,6 @@
+[
+	Rule (0, 3, 4, Red),
+	Rule (1, 3, 6, Red),
+	Rule (2, 1, 4, Green)
+	]
+

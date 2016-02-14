@@ -1,0 +1,1072 @@
+\documentclass[diss,english]{iiufrgs}
+
+\input{commonHeader.tex}
+
+\title{Coherence in distributed packet filters}
+
+
+\author{Penz}{Leandro Lisboa}
+
+\advisor[Prof.~Dr.]{Weber}{Raul Fernando}
+
+\date{Porto Alegre, November 2008}
+
+\begin{document}
+
+\maketitle
+
+\tableofcontents
+
+\clearpage
+
+
+
+\listoftables
+
+\listofalgorithms
+
+\listoffigures
+
+
+\abstract{
+Computer networks are under constant threat, even more when connected to the
+Internet. To decrease the risk of invasions and downtime, security devices such
+as the packet filter are deployed. As a first layer of security, the packet
+filter is responsible for blocking out unwanted traffic at key network
+locations. The packets dropped or forwarded by the filter are defined by a set
+of rules programmed by the network administrator. These rules are in the form of
+guarded commands, each with a condition and a decision section.
+
+As the number of services and networks grow, the number of rules tend to
+grow as well. Beyond a certain threshold, the complexity of maintaining such a large
+and distributed set of rules becomes a burden for the network administrator.
+Mistakes can be easily made, compromising security.
+
+This work develops the concept of ``anomaly'', each representing a potential
+problem, a contradiction or a superfluous rule in the rule set; i.e. a warning
+to the system administrator.
+There are 7 types of anomalies divided in two groups: single filter anomalies and
+networked anomalies. The single-filter anomalies warns the administrator about
+rules that contradict one another (the ``conflict'' anomaly) or have no effect
+(``invisibility'' and ``redundancy'') in the analysed filter. The networked
+anomalies, on the other hand, analyse the filters in the context of the network
+topology and warn the administrator about filters that contradict one another
+(``disagreement''), filters that block desired traffic (``blocking''), rules
+that have no effect on the given network topology (``irrelevancy'') and routers that are
+enabling unwanted traffic (``leaking'').
+Each type of anomaly is formally defined along with its algorithm.
+
+The developed concepts were used to implement a tool --- the \emph{Packet Filter
+Checker} (PFC) --- that reads a description of the rules and network topology in
+a simple custom language and reports all anomalies present. This tool is used to
+analyse and fix a fictional user case in several iterations of changing
+requirements. This shows the tool and the anomalies in the target context: where
+they help the network administrator.
+
+\KeywordsShow{packet filter, firewall, security policy, policy conflict, rule
+coherence.}
+
+}
+
+
+\begin{otherlanguage}{brazilian}
+\abstract{
+Redes de computadores estão sob constante ameaça, ainda mais quando conectadas à
+Internet. Para reduzir o risco, dispositivos de segurança como o filtro de
+pacotes são usados. Uma primeira camada de segurança, o filtro de pacotes é
+responsável pelo bloqueio do tráfego indesejado em posições chave da rede. Os
+pacotes que devem ser permitidos ou bloqueados pelo filtro são definidos através
+de um conjunto de regras programadas pelo administrador da rede. Essas regras
+tem duas partes: a seleção e a ação.
+
+Conforme cresce a rede e o número de serviços, a quantidade de regras tende a
+aumentar. Passado certo limite, a complexidade de manter uma quantidade grande
+de regras se torna um fardo para o administrador. Isso aumenta a probabilidade
+de enganos que podem prejudicar a segurança da rede.
+
+Este trabalho desenvolve o conceito de ``anomalia'', cada qual representa um
+problema em potencial, uma contradição ou uma regra supérflua dentro do conjunto
+de regras; ou seja, cada anomalia alerta o administrador da rede para
+determinada situação. Há 7 tipos de anomalias, que podem ser divididos em dois
+grupos: anomalias de filtro único e anomalias em rede. As anomalias de filtro
+único alertam o administrador sobre regras que se contradizem (``bloqueio'') ou
+que não possuem efeito no filtro (``invisibilidade'' e ``redundância''). As
+anomalias em rede, por sua vez, alertam o administrador sobre filtros que se
+contradizem (``discordância''), filtros que bloqueiam tráfego desejado
+(``bloqueio''), regras que não se aplicam a nenhum pacote que passe pelo filtro
+onde estão (``irrelevância'') e roteadores que permitem a passagem de tráfego
+indesejado (``vazamento''). Cada um desses tipos de anomalia é definido
+formalmente e apresentado junto com um algoritmo que a encontra.
+
+As anomalias e seus algoritmos foram usados para implementar uma ferramenta, o
+\emph{Packet Filter Checker} (PFC), que lê as regras e a descrição da topologia
+da rede e cria um relatório com todas as anomalias presentes. Este trabalho
+apresenta um caso de uso fictício que é analisado e corrigido com base nos
+resultados apresentados pela ferramenta. O caso de uso é apresentado em diversas
+iterações, cada uma representando alterações nos requisitos da rede. Este caso
+mostra a ferramenta e os conceitos no contexto-alvo: na ajuda ao administrador
+da rede.
+
+\KeywordsShow{filtro de pacotes, firewall, política de segurança, conflito,
+coerência de regras.}
+}
+\end{otherlanguage}
+
+
+\chapter{Introduction}
+
+Communication and interoperability between computers and other devices is of
+utmost importance to individuals and corporations. Applications such as
+electronic commerce, electronic mail, web browsing and others require the
+interconnection of computers to work. On the Internet and on most private
+networks, this communication is performed using the \emph{Internet Protocol}
+(IP). This protocol provides the means to identify (\emph{IP address}) and
+locate resources on the network.
+
+Most of the data in an IP network is transported using two other protocols: the
+\emph{Transmission Control Protocol} (TCP) and the \emph{User Datagram Protocol}
+(UDP). TCP provides a way to create and identify error-free communication
+channels with delivery and ordering guaranteed between two end systems. TCP is
+the transport protocol used in the Web, for instance. TCP enables many users to
+access a service, and also a single user to access many instances of a service.
+UDP, on the other hand, does not have the concept of communication channel. It
+allows a service to be accessed by multiple users, but it does not guarantee
+delivery, order or correctness. That also means that it has less overhead over
+the transported data.
+
+Through the use of these protocols by others of higher level, the Internet
+provides all its variety of services. And it is this large set of available
+services that makes the Internet hard to secure.
+
+It is risky to be connected to the Internet. This risk comes not only from
+vulnerabilities on the software used to access the services (from operating
+systems to browsers), but also from the software that provides the services. In
+addition to that, there are malicious users on the network that are ready to
+exploit these vulnerabilities. To defend a network from these users, many
+software and hardware solutions are developed and deployed.
+
+A first layer of protection can be found in firewalls, which are devices that can
+be deployed in key network locations to monitor and filter connections.
+Firewalls can be oriented to various aspects: application, traffic, service,
+etc. A very common orientation, and the one this work deals with, is the packet
+filter.
+The packet filter is a device used to control the data traffic between ``network
+zones'' with different security requirements. This control is configured by the
+use of rules. Each rule has two parts: the \emph{match} and the \emph{target}
+\cite{web:netfilter}. The match selects which packets the rule should be applied
+to, and the target is the action to be taken. The most common targets, which are
+available in every packet filter, are \emph{accept} and \emph{deny}. ``Accept'' let
+the selected packets travel through the device, while ``deny'' makes the filter drop
+the packets. Many filter implementations have other targets, to log or redirect
+packets, but ``accept'' and ``deny'' (and their equivalent) are the basic ones.
+
+Even though filters are completely defined with such a simple unit (set of
+tuples match$\rightarrow$target), filters can become quite complex and difficult
+to understand as the number of rules increase. The limitations in the semantics
+of matches and the
+complexity of the security policy are the main reasons for the high number
+of rules. In addition, these rules can be spread along many security devices,
+making the maintenance of the security policies and the network
+topology a difficult and error-prone task.
+
+In a single filter, errors come mostly from the order of the rules. When a
+packet arrives, the filter searches the rule list from top to bottom until it
+finds a matching rule. If a new rule is placed too low in the list, it might not
+match all the intended packets; if a new rule is placed to high, it might match
+more packets than it should. Both situations can make the behaviour of the
+filter diverge from the security policy.
+
+For single filters, this work defines 3 types of anomalies - potential errors
+that can come from the wrong ordering of the rules: the invisibility - when a
+rule never matches any packet; the conflict - when the order between two rules
+is neither trivial nor irrelevant; and the redundancy - when a rule can be
+removed without any impact on the filter. All these situations are undesired,
+and all can be easily fixed by the addition, removal or target changing of the
+rules.
+
+In a system with multiple networked filters there are situations that come from
+the interaction of the rules of different filters. These situations form a whole
+new set of problems, as packets from one point to the other may be filtered
+by different rule sets as nodes fail and even under normal conditions.
+With the rules spread out between the filters, analysing and guaranteeing the
+overall behaviour becomes very hard.
+
+For networked filters, we provide four other types of anomalies - in this case,
+when different paths in the network provide different accessibility for packets:
+the disagreement - when two filters define different targets for directly
+connected networks; the block - when a filter deny packets that should be
+accepted; the irrelevancy - when a filter has rules that deal with packets that
+don't pass through it; and the leak - when a set of routers provide a path for
+packets that should be dropped.
+
+This work provides, for each anomaly, detailed definitions, examples and
+algorithms. The \emph{Packet Filter Checker} (PFC) is the application developed
+that analyses networks and filters and
+generates many of the figures in this work. PFC is also where the
+algorithms presented were validated, and can thus find anomalies in filters that
+the user describes.
+
+This work is organized as follows. In chapter 2, an introduction to computer
+networks and protocols is presented along with packet filters. Chapter 3
+explores existing works that deal with rule coherence and positions this work
+among them. In chapter 4, the scheme used for the verification of rules in an
+isolated packet filter is explained. Chapter 5 extends this scheme to deal with
+a set of networked filters. Chapter 6 presents a case study and shows the use of
+the application developed. At last, the conclusion is drawn, followed by the
+references.
+
+
+
+\chapter{Computer networks and packet filters}
+
+
+
+\section{The Internet Protocol}
+\index{IP}
+
+The basic information on IP is taken from \RFC{791} \cite{rfc791}, even though a
+number of RFC's update the protocol \cite{rfc1349,rfc2474,rfc3168}.  These
+updates are not relevant for this work, as they deal mostly with the field
+\emph{Type of Service} that will not be used.
+
+According to the OSI model \cite{Zimmer80}, the purpose of the network layer is to provide the
+means to exchange data units between two transport endpoints.
+
+In practice, and according to \RFC{791}, the scope of IP is to deliver a limited
+sequence of bits (internet datagram) from a source to a destination in a system
+of interconnected networks. The protocol has no flow control and does not
+guarantee datagram ordering, delivery or integrity. What it provides is
+an abstraction over the links used by the source, destination and intermediate
+nodes.
+
+An IP datagram has two parts: the header and the payload. The header has the
+information that is used by the protocol itself, while the payload has the data
+being transmitted.
+
+The IP header has a field denominated \defpar[IP header!]{Protocol} that
+identifies the payload format. That is, it indicates if the payload is an ICMP
+control message, a TCP packet or an UDP datagram, among other options.
+
+The other two important fields of the IP header are the
+\defpar[IP header!]{Source Address} and the
+\defpar[IP header!]{Destination Address}. These fields have the IP address of
+the source and destination device, respectively.
+
+
+
+\subsection{IP addressing and routing}
+
+The \defpar{IP address} is four octets that identify a network interface. The
+address, with the exception of some ranges, has global scope. For a specific
+service to be available on the internet, the host of the service must have an
+interface with a globally valid and unique IP address.
+
+\RFC{791} specified that the number of nodes in a network was fixed and given by
+the class of the IP address of the network. This approach was replaced by a
+hierarchical scheme, where each network can be seen as a unique block from
+outside, and be divided internally as smaller networks. This new approach is
+called \defpar{Classless Inter-Domain Routing} (CIDR) \cite{rfc1518,rfc1519}.
+CIDR uses, in addition to the network address of the interface, a
+\defpar{network mask}. This mask has also four octets and identifies which bits
+of the address define the network and which define the host. For instance:
+an address \ip{205.100.27.2} with the mask \ip{255.255.255.0} belongs to a device on the
+network \ip{205.100.27.0}. As network masks have all ``on'' bits before the first
+``off'' bit, they are usually represented by the number of ``on'' bits following a
+slash in the interface address. This representation is called the
+\defpar{network prefix} of the network. The network prefix of the example above is
+\ip{205.100.27.2/24}.
+
+To get to its destination, an IP datagram that is not addressed to the local
+network must go through a set of routers \cite{rfc1812}.
+\defpar{Routers} are network devices
+that connect different networks and forward datagrams from one interface to the
+other based on the datagram's destination address. The decision process is
+called \defpar{routing}.
+
+Routers know which networks their interfaces are connected to, and also about
+other routers and their networks. This information can be provided statically
+by the network administrator or obtained dynamically through the use of routing
+protocols, such as \emph{RIP} \cite{rfc1388} and \emph{OSPF} \cite{rfc2328}.
+It is also common to have a
+default route to use if a datagram is destined to an unknown network, specially
+in the presence of a connection to the Internet.
+
+All considerations made above are valid inside an autonomous system (AS)
+\cite{rfc1930}. The
+macro structure of the Internet is composed by several autonomic systems that
+represent different corporative and administrative domains. The requirements and
+implementation of inter-AS routing are different from those presented above.
+
+
+
+\subsection{ICMP}
+
+The \defpar{Internet Control Message Protocol} \cite{rfc792} is used for the
+exchange of control messages between two IP entities. These messages travel
+inside the payload of the IP datagram, but are part of the protocol and not an
+upper layer.
+
+An ICMP message is identified with the value {\tt 1} in the Protocol field of the
+IP header. After the header, the type of message is identified by an octet, and
+the rest of the datagram contains the body of the message. Some message types
+are more common than others, and some are even obsolete
+\cite{buildingInternetFirewalls}. Some types available are:
+
+\begin{description}
+	\item[echo request and echo reply] {
+		These messages are used by utilities such as ping and traceroute. An IP
+		entity send an echo request with some data to another entity, that has
+		to reply with the same data.
+		}
+	\item[destination unreachable] {
+		Can be sent by a gateway upon discovering that the destination of an IP
+		datagram can't be reached.
+		}
+	\item[source quench] {
+		Sent by a IP entity when it is receiving datagrams from a source too
+		fast. Can be described as a ``please slow down'' request.
+		}
+	\item[time to live exceeded] {
+		This message means that a datagram has exceeded its Time To Live (TTL).
+		Can signal routing problems, for instance.
+		}
+	\item[parameter problem] {
+		This message is sent to the source of an invalid datagram that had to be
+		discarded.
+		}
+	\item[redirect] {
+		This message is sent to a host when a datagram should be sent through
+		another path. The datagram is also forwarded to the correct path.
+		}
+	\item[router announcement and router selection] {
+		Can be used to request and announce routers in a network.
+		}
+\end{description}
+
+Even though ICMP messages are useful, they also represent a risk if allowed to
+flow freely in a network.
+
+\emph{Destination unreachable} and \emph{time to live exceeded} are used by
+traceroute and allow the discovery of the topology of a network.
+\emph{Destination unreachable} can be forged in such a way as to close a
+connection between two hosts.
+
+\emph{Redirect}, \emph{router announcement} and \emph{router selection} are
+supposed to modify the routing table of a host and can be used in a denial of
+service attack.
+
+It is recommended \cite{buildingInternetFirewalls} that administrators allow
+only the ICMP messages that are used and deny all others. This policy denies
+also several ICMP messages that are not cited above and that can be as
+dangerous.
+
+
+
+\section{UDP}
+
+\RFC{768} \cite{rfc768} defines the \defpar{User Datagram Protocol} (UDP) as a
+mean to exchange datagrams over IP.
+
+As in other IP protocols, a UDP datagram has a header and a payload, that are
+both carried inside the payload of the IP datagram.  The header identifies the
+source and destination ports.
+
+\defpar{Source port} is an optional UDP field. It can be used to indicate the
+port that should be used for an answer.
+
+The \defpar{destination port}, on the other hand, only has meaning when used
+with the destination IP. Together, they identify the destination process that is
+supposed to receive the datagram.
+
+UDP, by itself, does not define anything else. That means that there are no
+datagram arrival, integrity or ordering guarantees.
+
+UDP can be seen as IP plus ports, and it is usually used by the applications
+with transport requirements different from
+those provided by TCP.
+
+
+
+\section{TCP}
+
+The \defpar{Transmission Control Protocol} (TCP), defined in \RFC{793} \cite{rfc793},
+provides a reliable communication channel between two processes in different
+hosts in a networked environment. TCP is connection oriented, and corresponds to
+the transport layer of the OSI model. The reliability of the channel implies that
+the data will arrive at its destination in the same order it was sent, without
+loss or duplication.
+
+For the scope of this work, there are three fields of interest in the TCP
+header:
+\begin{description}
+	\item[source port] {
+		Identifies the sending process.
+		}
+	\item[destination port] {
+		Identifies the destination process.
+		}
+	\item[flags] {
+		Flags are used in special packets, to establish a connection, for
+		instance. The flags will be explained later on.
+		}
+\end{description}
+
+A single connection is identified globally by the set \{ $destination_{IP}$,
+$destination_{port}$, $source_{IP}$, $source_{port}$ \}. That is the reason a host can
+access the service in several instances, as long as its source port is unique.
+TCP is bidirectional, requiring no extra connection for answers.
+
+The most used TCP flags and their meaning \cite{buildingInternetFirewalls}:
+\begin{description}
+	\item[ACK] {
+		Acknowledgement. Should be ``no'' in every packed of a connection except the
+		first one.
+		}
+	\item[RST] {
+		Reset. Aborts a connection.
+		}
+	\item[SYN] {
+		Synchronize. Used in connection establishment to synchronize the
+		sequence numbers.
+		}
+	\item[FIN] {
+		Finish. Used when gracefully closing a connection.
+		}
+\end{description}
+
+Figure \ref{fig:tcpConnect} shows that the first packet exchanged in the establishment
+of a TCP connection has the ACK flag off. That makes it easy to block connection
+initiation.
+
+\begin{figure}
+	\imagenorm{tcpConnect.pdf}
+	\caption{\label{fig:tcpConnect}Starting a TCP connection}
+\end{figure}
+
+The RST flag is used to abort a connection. A packet with this flag on can be
+sent from any side at any moment when a problem is detected in the connection or
+an unexpected packet arrives. RST is sent, for example, when a connection
+start request is made to a port with no process attached.
+
+The SYN flag makes it possible to check if a port has a process without
+completely establishing a connection. This is called \defpar{half open port
+scan} \cite{firewallPoliciesVPNconfig}, and is performed by sending a packet with
+the SYN flag on and then checking the answer. If it is a packet with the RST flag,
+there is no process; if it is a packet with ACK on, then, there is one. As most
+systems do not log connections that are not fully open, it is possible to scan
+the processes of a host without alerting the system administrator.
+
+Similar techniques can be used to discover the operating system of a host
+\cite{fyodor-nmap-book}, as different implementations of IP behave slightly
+different in the presence of unusual datagrams.
+
+Even though it is impossible to eliminate all threats with packet filters,
+they can be at least reduced. For instance, it is possible to block invalid
+packets in the filter, preventing some OS scan methods.
+
+Another important use of packet filters is of centralizing and protecting
+against security failures in services that can be open by default or without
+the user's knowledge. Some operating systems have services on by default to
+make the user's life easier, even though that creates attack vectors. With
+packet filters, it is possible to prevent access to services that are not
+explicitly offered according to the security policy.
+
+
+
+\section{Packet filters}
+
+As mentioned, the \defpar{packet filter} is the component of a firewall
+responsible for blocking undesired datagrams. Packet filters are usually placed between
+networks in order to control the flow of data between zones with different
+accessibility requirements. In this aspect, they also act as routers.
+
+A packet filter is an entity uniquely defined by:
+\begin{itemize}
+	\item The IP address and network prefix length of its interfaces;
+	\item The set of rules of the filter.
+\end{itemize}
+
+There are several models for the exact format of the rules, but every model
+studied shared a common subset:
+\begin{itemize}
+	\item Every rule has two parts, one responsible for the selection of
+		datagrams (\emph{match}) and other that defines the action to be taken
+		for the datagrams (\emph{target});
+	\item The set of rules is analysed in a sequence by the filter for every
+		packet, until a rule selects the packet and defines the action to be
+		taken;
+	\item The selection is made based on the fields of the header of IP, TCP,
+		UDP, and ICMP;
+	\item At least two targets are always implemented: one that allows the datagram
+		to be forwarded (\emph{accept}) and another that drops the datagram
+		(\emph{deny}).
+\end{itemize}
+
+From this common core, implementations develop different extensions for both the
+match and the target.
+
+
+
+\subsection{Match}
+
+\label{sec:match}
+
+The part of a rule that selects a packet is called \defpar{match}.
+The match uses one of the relations
+of \emph{exact comparison}, \emph{prefix comparison}, or
+\emph{range comparison} of the fields of a header with a specified parameter
+\cite{Baboescu-FastConflict-03,Srinivasan-FastLayerFour-98}.
+These types of comparisons are mentioned in order of growing generality. That
+means that an exact comparison can be represented by a prefix comparison, and a
+prefix comparison
+can be represented by a range comparison, with no addition of rules.
+
+The fields used are generally the flags of the headers of the protocols, the
+source and destination addresses, and the source and destination ports.
+Specifically, the flags are more properly selected with an exact comparison; the
+addresses with a prefix comparison; and the ports with a range comparison.
+
+Meanwhile, the majority of works limit the semantics of the match in order to
+simplify the implementation or provide better performance.
+There are works \cite{Eppstein-Rectangle-01,Su-SegmentTree-00,Hari-Detecting-00}
+that take only the source and destination addresses.
+Some \cite{Eppstein-Rectangle-01,Su-SegmentTree-00} do it in order to be able to use
+2D geometric structures to improve match performance.
+
+In Woo \cite{woo00modular}, we see an algorithm  that focuses on the prefix comparison
+of the source and destination addresses. Later, the authors
+extend this algorithm to match on five fields: source and destination addresses, source and
+destination ports and protocol.
+
+Baboescu and Varghese \cite{Baboescu-FastConflict-03},
+on the other hand, developed an algorithm
+for the detection of
+conflicts on two fields based on prefixes, and then extended it to five fields.
+Baboescu's work approached each field as a set of bits that can be
+matched by prefix.
+
+Most of the aforementioned works tackle the problem of efficient and fast
+selection of datagrams and packets. Only a few of them deal with conflicts in
+the rules.
+Taylor has published a survey \cite{Taylor-Taxonomy-05} where the mentioned works can be
+seen in context.
+
+
+
+\subsection{Target}
+
+The \defpar{target} of a rule is the action that the filter takes when a
+datagram is selected by the rule.
+Most packet filter implementations have a variety of targets available. Those
+targets can be classified in two groups: terminating and non-terminating.
+Terminating targets are those that stop rule traversal when the corresponding
+rule matches, i.e. \emph{deny}. Non-terminating targets are those that can be performed
+with no disturbance to rule traversal, i.e. \emph{log}.
+Linux's \emph{iptables} \cite{web:netfilter} is a packet filter implementation
+with several terminating and
+non-terminating targets.
+
+Even with this target variety, most of the academic works studied
+\cite{Eppstein-Rectangle-01,Su-SegmentTree-00,Hari-Detecting-00,Eppstein-Rectangle-01,Su-SegmentTree-00}
+deal only with the
+\emph{accept} and \emph{deny} targets, both terminating.
+That can be justified by the fact that these two targets are the ones
+that provide filtering, and are thus the most
+important ones. They are also the ones that implement the behaviour of the filter
+for an external observer. As these two targets are symmetrically opposites,
+their relation defines what is a conflict in a set of rules.
+
+
+
+\subsection{Stateless and stateful filters}
+
+Packet filters can be classified in two groups: stateless and stateful.
+
+\defpar[filter types]{Stateless filters} are those that have no notion of
+connection state, and provide match features based only on the fields of a
+datagram.
+
+\defpar[filter types]{Stateful filters}, on the other hand, keep track of
+connection state and allow the user to make rules based on it. With
+stateful filters, it is possible to allow connections to be started in only one
+direction without matching on TCP flags explicitly. Stateful filters also tend to have a
+reduced number of rules, as it is not necessary to inset rules to match both
+flow directions: there is usually a rule that accepts traffic from
+already initiated
+connections, and the rest of the rules deal only with which connections can be
+initiated.
+
+As a disadvantage, stateful packet filters have a greater overhead in
+memory, as every connection state must be kept, and inferior performance when
+compared to the corresponding stateless filter \cite{buildingInternetFirewalls}.
+
+
+
+\chapter{Existing works in packet filter coherence}
+
+Existing works related to packet filter coherence will be presented in this
+chapter.
+
+The works were split in groups according to their approach and focus:
+\begin{itemize}
+	\item rule pair analysis:
+		works that use the relation between two rules and their order inside the
+		filter to check their consistency;
+	\item data structures:
+		works that improve the performance of packet classification with some
+		novel structure that is also used to check the consistency of rules;
+	\item conflict resolution:
+		works that not only present the definition of ``conflict'' as a sort of
+		consistency problem, but also suggest resolution procedures;
+	\item application-oriented:
+		works that present applications that are complete implementation of some
+		coherence scheme.
+\end{itemize}
+
+
+
+\section{Rule pair analysis}
+
+Conflicts in the set of rules of packet filters can be defined by the relation
+between the rules of the filters, when analysed in pairs. That is the approach
+used by Al-Shaer and Hamed \cite{AlSHam-Fpa-03}, their work is considered as a
+reference
+throughout this work.
+
+
+
+\subsection{Relations}
+
+$R_x$ and $R_y$ being two rules with fields \{$protocol$, $source_{IP}$,
+$source_{port}$, $destination_{IP}$, $destination_{port}$ \}, the relation
+between $R_x$ and $R_y$ can be one of:
+
+\begin{description}
+	\item[disjoint] {
+		If every field of $R_x$ is completely disjoint in respect to the
+		corresponding field of $R_y$. In other words: if the intersection of
+		their fields is the empty set.
+		}
+	\item[equal] {
+		If every field of $R_x$ is equal to the corresponding field of $R_y$.
+		}
+	\item[inclusive] {
+		If every field of $R_x$ is equal or a subset of the corresponding
+		field of $R_y$ and the two rules are not equal.
+
+		$R_x$ is said to be a \defpar{subset} of $R_y$, while $R_y$ is said to
+		be a superset of $R_x$.
+		}
+	\item[partially disjoint] {
+		If at least one field of $R_x$ is a subset or a superset or equal to the
+		corresponding field of $R_y$ and there is at least one field of the two
+		rules that is disjoint.
+		}
+	\item[correlated] {
+		If there is a field in $R_x$ that is a subset or equal to the
+		corresponding field of $R_y$ and the other fields are a superset of the
+		corresponding fields of $R_y$.
+		}
+\end{description}
+
+These relations are exclusive and complete. That means that for each pair of
+rules, there is always one, and only one, of those relations that apply
+\cite{AlSHam-FpaTools-02}.
+
+
+
+\subsection{\label{anomalias}Anomalies}
+
+\defpar{Anomalies} are potential problems. A filter will work when anomalies are
+present, but it probably won't have the intended behaviour, or could have
+the same behaviour with a smaller set of rules.
+
+This behaviour is not determined solely by the set of rules with their fields,
+but also by the order in which they are traversed by the filter. According to
+some models, the rule order defines an implicit priority that only appears when the
+filter is taken as a whole. As the network administrator does not define the
+order of rules explicitly, it is not considered a safe information.
+
+From the relation between the rules and their order,
+the following anomalies are defined \cite{AlSHam-Distributed-04}:
+
+\begin{description}
+	\item[Shadowing] {
+		If a rule $R_x$ is a subset of a rule $R_y$ that is checked before, then
+		$R_x$ will never select any packets.
+
+		This shows a rule that is unnecessary or in the wrong
+		position.
+		}
+	\item[Correlation] {
+		When two rules with different targets are correlated. This shows a
+		conflict where a change in the order of the two rules would result in a
+		different filter behaviour.
+		}
+	\item[Generalization] {
+		When a rule $R_x$ is a superset of a rule $R_y$ that is checked before
+		but with a different action. This makes $R_y$ an exception of $R_x$. If
+		the order of the two rules were exchanged, a shadowing anomaly would be
+		reported.
+
+		Even though Al-Shaer and Hamed make this an anomaly, it can be quite
+		common in a correct filter.
+		}
+	\item[Redundancy] {
+		When the removal of a rule would not cause any change on the filter's
+		behaviour.
+
+		That means that $R_x$ is a subset of $R_y$ and they have the same
+		target.
+		}
+\end{description}
+
+The anomalies of redundancy and shadowing represent real errors in rule
+configuration. On the other hand, correlation and generalization can occur in a
+correct filter, and are only anomalies because the behaviour of the
+filter is defined by the implicit rule order. That's why they are
+reported, so that the system administrator can confirm the order of the rules.
+
+
+
+\subsection{Criticism to rule pair analysis}
+
+Comparing every rule to every other rule is an approach that has some
+issues.
+
+The worst issue is the lack of vision of the effect of the rules combined.
+It is possible to create a filter where a rule is not shadowed by any
+isolated rule, but is shadowed by a group of them. This lack of vision will
+result in false negatives.
+
+Another big problem is the definition of the generalization and correlation
+anomalies. They can be present in a correct filter, and there is no way to
+prevent them from being reported. This leads to false positives, as there is no
+way to design an anomaly-free filter for some intended behaviour.
+
+Another issue is the constant complexity, which always lies in $O(r^2)$,
+where $r$ is the number of
+rules. That happens because every pair of rules must have its relation
+discovered in order to find the anomalies. That is a waste in a filter where all
+rules are disjoint, for example.
+
+Even with these issues, Al-Shaer and Hamed's work is very important and its definition of rule
+relation and anomalies is used as the base for the evaluation of other works.
+
+
+\section{Data structures}
+
+In this section, works that deal mostly with different data structures and check
+some sort of coherence on the rules of a packet filter are exposed.
+
+
+
+\subsection{Tries and bit vectors}
+
+A \defpar{trie} is a tree in which the key of every node is given by its
+position in the tree \cite{knuth3}.
+
+Tries have their search time proportional to the size of the key instead of
+proportional to the number of entries. As such, tries can have faster lookup
+times than binary search trees. They also help with the problem of \emph{longest
+prefix matching}. An example of trie can be seen in figure \ref{fig:trie1}.
+
+\begin{figure}
+	\imagenorm{trie1.pdf}
+	\caption{\label{fig:trie1}Example of trie for keys \{000, 001, 010, 011,
+	100, 101, 110, 111 \}. }
+\end{figure}
+
+Tries are used on the problem of packet classification, mainly as part of a
+bigger structure, such as \emph{grid-of-tries}
+\cite{Srinivasan-FastLayerFour-98},  \emph{set prunnning trees}
+\cite{Srinivasan-FastLayerFour-98}, \emph{extended grid-of-tries}
+\cite{Baboescu-CoreRouters-03}, \emph{bit-vector} \cite{Stiliadis-BitVector-98}
+or \emph{aggregate bit vector} \cite{Baboescu-AggregateBitVector-01}.
+
+On the field of rule conflicts, tries are used in by Baboescu and Varghese \cite{Baboescu-FastConflict-03}
+and Hari, Suri and Parulkar \cite{Hari-Detecting-00}.
+
+Baboescu and Varghese \cite{Baboescu-FastConflict-03} use bit vectors to find conflicts fast. The
+proposal of the article is to find every rule that has a potential conflict with
+a rule being added. Their work builds a trie for each field where each leaf has a bitmap
+of the rules that have either an exact equivalence or a prefix equivalence with
+the key. This structure is called a \defpar{bit vector} (example in table
+\ref{tab:bv} and figure \ref{fig:bv}). To find potential conflicts with a new
+rule, every field traverse its corresponding trie, and the intersection of the
+bitmaps found for each field shows potentially conflicting rules.
+
+Even though Baboescu's scheme finds potential
+conflicts between an old rules and a new one, it does not define
+what is supposed to happen with the conflicts found. The article does
+not mention rule order or even targets, and leaves this work to the system
+administrator.
+
+\begin{table}
+	\center{
+	\caption{\label{tab:bv}Table with a bit-vector example.}
+	\begin{tabular}{cll}
+		Rule & Field$_1$ & Field$_2$ \\
+		\hline
+		R$_0$    & 000000*   & 111001*  \\
+		R$_1$    & 1001*     & 0000101* \\
+		R$_2$    & 10110*    & 111*     \\
+		R$_3$    & 1111*     & 0000100* \\
+		R$_4$    & 00000100* & 100010*  \\
+		R$_5$    & 10111*    & 000000*  \\
+		R$_6$    & 10*       & 1111*    \\
+		R$_7$    & 0001010*  & *        \\
+		R$_8$    & 000111*   & 100011*  \\
+		R$_9$    & 000000*   & 111*     \\
+		R$_{10}$ & *         & *        \\
+	\end{tabular}
+	}
+\end{table}
+
+\begin{figure}
+	\centering
+	\imagefit{bv.pdf}
+	\caption{\label{fig:bv}Bit-vector of the rules in \ref{tab:bv}}
+\end{figure}
+
+
+
+\subsection{Geometric structures}
+
+Some works \cite{Eppstein-Rectangle-01,Su-SegmentTree-00} use a geometric
+approach to tackle the problem of packet classification and conflict detection.
+
+To enable that, those works reduce the packet to two fields, source and
+destination address, and use them as axis in a plane. This transforms the rules
+into rectangles in this plane, and the problem of packet classification becomes
+the problem of locating the highest-priority rectangle (rule) in the plane that
+contains the point (packet).
+
+Eppstein and Muthukrishnan \cite{Eppstein-Rectangle-01} use this approach also to detect conflicts. In
+this article, every rule has an explicit priority. A conflict arises when two
+rules with different targets and the same priority have an intersection
+in that is not inside another rectangle with higher priority.
+
+This definition of conflict, and the fact that it is found without comparing
+pairs of rules makes this approach free of false positives and negatives. There
+are no false positives because it is always possible to get rid of the conflict
+in a filter by defining a rule with higher priority; there are no false
+negatives because the requirement of explicit priorities makes the conflict
+real.
+
+Even though Eppstein's work requires a lot of restrictions on the definition of rules
+-- only two fields and an explicit priority -- it presents interesting results
+when compared to Al-Shaer and Hamed's.
+
+
+
+\section{Conflict resolution}
+
+Hari, Suri and Parulkar \cite{Hari-Detecting-00} also develop an algorithm for fast conflict detection
+and suggest the resolution of these conflicts with rule addition.
+
+The article assumes the rules have no priority, implicit or explicit. When there
+is a packet that two rules match, the one that is more specific should be used.
+A conflict is reported only if there is a tie. The conflict is then resolved by
+adding a rule that is more specific to the conflicting region.
+
+Even though the article does not use any trie or geometric structure, it limits the
+fields in a packet to two in a first moment, and later extends the algorithm to
+five. The article also requires that the fields match only by prefix and not by
+arbitrary ranges.
+
+
+
+\section{Applications}
+
+Various works
+\cite{MayWooZis-Fang-00,AlSHam-Fpa-03,BarMayNisWoo-Firmato-04,MayWooZis-OfflineFirewall-06}
+develop applications that help the network administrator in checking the
+coherence of the rules of a packet filter. In this section these applications
+will be explored.
+
+
+
+\subsection{Firewall Policy Advisor}
+
+The \defpar{Firewall Policy Advisor} \index{FPA} (FPA)
+\cite{AlSHam-Fpa-03}, is an application with a graphical interface that discovers
+the relation between rules and shows the anomalies found.
+Anomalies were already discussed in \ref{anomalias}, and need no further
+explanation.
+
+The interface, by itself, allows rule entry and shows them in a tree structure
+defined in the same article. The anomalies are updated in real time and shown in
+the same window where the
+rules are edited, making it very easy to fix the rule set.
+
+Al-Shaer's work analyses only isolated filters, and checks the rules by pairs.
+
+
+
+\subsection{Fang and Firewall Analyser}
+
+Mayer, Wool and Ziskind \cite{MayWooZis-Fang-00} present \defpar{Fang} (\emph{Firewall ANalysis
+enGine}): a graphical interface for permission query on a set of filters.
+The application must be configured with the network topology and filter rules.
+It provides answers to queries like ``which services of host $A$ can be accessed
+from host $B$'', or ``which hosts can access service $C$ of host $D$''.
+
+Mayer's work is the first reference that tries to ease the administration of a set
+of filters in opposition to a single one. Its engine is built from a graph
+algorithm that processes the network topology and from a rule simulator that gives the
+answer to the queries made by the user.
+
+Fang's greatest weakness is that it is only a query interface
+\cite{MayWooZis-OfflineFirewall-06}. The researchers found out that users really
+don't know what to ask to
+check the security and efficiency of the set of rules.
+
+For this reason, another application was developed: the \defpar{Firewall
+Analiser} (FA). FA requires from the user only the data input, and instead of providing
+a query interface, FA provides a report full of details about which service can
+be accessed from which host. FA also knows which zone is ``external'' (the
+Internet), and has a database of services. A big list of open services is
+expected to alert the network administrator about a misconfigured filter.
+
+The presented applications can be divided in two groups: the ones
+that check rule coherence in an abstract form (FPA) and the ones that help the network
+administrator understand  and check the functionality of a filter (Fang, FA). Only one
+application dealt with a set of filters (FA), and it did not check the
+set of rules for anomalies. That is, then, an open problem.
+
+
+
+\chapter{Isolated filter verification}
+
+\input{isolados.tex}
+
+\chapter{Distributed filters verification}
+
+\input{distribuidos.tex}
+
+\chapter{Assertions}
+
+\input{assercoes.tex}
+
+\chapter{Case study}
+\label{casestudy}
+
+\input{casestudy.tex}
+
+\chapter*{Conclusion}
+
+This master thesis presents the results of a research and work on coherence in
+packer filters. It also documents the design and demonstrates \emph{PFC}, the Packet Filter
+Checker that was developed.
+
+From chapter 1 to chapter 3, a research of the environment is made. Concepts of
+how the network operates and existing work in packet filter coherence are
+presented. It is shown that there is room for improvement, as the existing works
+on algebraic verification of isolated filters have some limitations, and there is
+no checker for multiple filters.
+
+In chapter 4, the first contribution is made: a new algebraic checker for
+isolated filters. By using a more robust model based on sets and different
+models for rule relation and anomalies, the checker is not susceptible to the
+problems of false positives and negatives that could be found in previous
+works. The model and the design of the anomalies are based on the assumption
+that the order of rules is the main source of errors in a filter. So, every time
+the order of the rules is plain wrong (a rule is never used), trivial (inversion
+would result in a wrong order), or irrelevant (inversion would not change the
+filter), an anomaly is reported. Even though the administrator may have to add
+rules that do nothing to the behaviour to the filter only to clear conflicts, an
+anomaly-free filter is much easier to maintain: the administrator can change the
+order of the rules without fearing a change in the behaviour of the filter, and
+new rules rise anomalies indicating the rules they interfere with when placed
+ambiguously.
+
+In chapter 5, the algebraic checker for distributed filters is presented. This
+checker is the main contribution of this work. By using the set algebra of the
+previous chapter and a model of how the filters should behave, a set of
+distributed anomalies was developed, and the isolated checker extended into a
+distributed one. Once again, we base the anomalies on a single assumption: that
+every possible path for each datagram inside the network must present the same
+behaviour. That is a reasonable assumption, as the network should not accept
+more types of datagrams from a point to another when a filter is too loaded
+or fails. As with the isolated filter design, the administrator may have to add
+rules in some filters to clear all anomalies, but an anomaly-free network is
+easier to maintain and change -- each new rule that needs to be in further
+filters will lead to an anomaly.
+
+Chapter 6 tackles functional verification of distributed filters with
+assertions. The idea is simple, but very useful: the verification of some
+properties of the resulting accessibility profile. By using assertions, the
+administrator can code the expected behaviour of the filter in a higher level,
+and let PFC check if the implementation conforms. The value of this idea
+demonstrated on the next chapter, the case study.
+
+The case study is made of a series of iterations on one fictional company. In each
+iteration, the requirements of the network are changed along with its topology.
+Even though the security policy doesn't change, it was possible to demonstrate
+every anomaly.
+
+The examples of the case study as well as the examples of anomalies in the
+previous chapters were all analysed with PFC. PFC was also used to generate the
+figures of the
+profiles and the representations of the examples.
+For the figures of the topologies, PFC generated an output suitable for use with
+\emph{Graphviz} \cite{web:graphviz}. PFC was developed using
+Haskell \cite{haskell}, a purely functional programming language with
+non-strict semantics. Haskell made a difference in the development of the
+algebraic analyses with its strong, static polymorphic types. On the library
+front,
+Parsec \cite{haskell:parsec} provided an easy-to-use parser combinator
+and QuickCheck \cite{haskell:quickcheck} was used to create automatic property
+tests.
+
+It is in the interest of the network administrator to clear its network of all
+anomalies, as their absence testify the consistency (conflict; disagreement,
+blocking, and leaking) and minimalism (invisibility, redundancy; irrelevancy) of
+the setup. There is one issue, though: the administrator might have to add
+unnecessary rules to filters only to get them anomaly-free. That can be
+the case when there are conflicts and disagreements, as these anomalies are
+report situations of ambiguity where PFC cannot determine the administrator's
+intention. A possible solution for this issue could be a better integration of
+the rule checker with the assertion checker: only report conflicts and
+disagreements when there is no assertion to define the desired behaviour for the
+analysed region, and take the target of the assertion as the correct one for the
+rest of the analyses.
+
+Another lesser issue that might arise is the tool's reliance on the uniqueness
+of IP addresses. The internal representation of the model, and even the syntax
+of the network description file depend on it. That is an issue as it blocks the
+support for address translation (NAT). But as it is unusual for a company to
+have more than one translated network, this issue might not have an impact.
+
+These issues aside, we have achieved our goal: the development and
+implementation of an algebraic checker for rules in single and networked
+filters. To our knowledge, there is no other algebraic rule checker that
+supports networked filter, that is a contribution to the field by itself.
+Other than that, our single-filter checker has two properties that are found in
+no other: every anomaly reported can be eliminated by the addition or
+removal of rules (no persistent false positives) and the rules are analysed in
+their context, as there are some problems that can only be detected that way.
+Our tests and the case study show that the solution developed is robust and
+presents comprehensible information for all the anomalies, and can potentially
+help the network administrator setup and maintain a secure network.
+
+
+
+\bibliographystyle{abnt}
+\bibliography{fw.bib}
+
+\input{resumopt.tex}
+
+%\printindex
+
+\newpage
+
+\pagestyle{empty}
+
+\centering\includegraphics[width=\columnwidth]{ppgcvista.pdf}
+
+\end{document}
+
+% vim: spelllang=en
+

@@ -1,0 +1,7 @@
+digraph {
+	rankdir=LR
+	Disagreement -> Blocking
+	Disagreement -> Leaking
+	Blocking -> Irrelevancy
+}
+

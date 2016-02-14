@@ -1,0 +1,178 @@
+
+\begin{otherlanguage}{brazilian}
+
+\appendix
+
+\chapter{Resumo dos principais resultados}
+
+
+\section{Introdução}
+
+Este capítulo apresenta um resumo deste trabalho, com foco nos resultados
+obtidos, em português.
+
+O trabalho em si começa pela apresentação da modelo usado para a análise das
+regras de um filtro de pacotes. A partir desse modelo, é desenvolvido o
+conceito de anomalia isolada, que se trata de uma incoerência nas regras de um
+filtro. Até este ponto, o presente trabalho se assemelha com o trabalho de
+Al-Shaer e Hamed
+\cite{AlSHam-FpaTools-02,AlSHam-Fpa-03,AlSHam-Distributed-04,AlSHam-Management-03,AlSHam-Modeling-04}.
+Em seguida, é apresentado o modelo desenvolvido para redes de computadores com
+filtros e roteadores. Com este modelo, são definidas as anomalias distribuídas,
+e esta é a principal contribuição deste trabalho. As anomalias distribuídas são
+as incoerências encontradas entre regras de filtros diferentes e outras
+incoerências da própria topologia da rede. Depois disso as asserções são
+apresentadas, que nada mais são do que testes de tráfego feitos sobre o modelo
+da rede. Em seguida é feito um estudo de caso e o trabalho é finalizado.
+
+Segue um resumo dos principais pontos do trabalho.
+
+
+
+\section{Anomalias isoladas}
+
+O modelo de filtro de pacotes desenvolvido considera o filtro como uma função
+matemática cuja entrada é um datagrama IP e cuja saída é uma ação de duas
+disponíveis: aceite ou descarte. O filtro é programado pelo administrador da
+rede através de regras, cada uma fazendo o mapeamento de um conjunto de
+datagramas para uma ação. As regras são avaliadas sempre na mesma ordem, e a
+primeira que possuir o datagrama recebido em seu conjunto define a ação a ser
+tomada para esse.
+
+Trabalhos anteriores \cite{AlSHam-Fpa-03} indicam que a maior parte dos erros na
+configuração de filtros vem da ordenação das regras. Por isso, cada caso no qual
+a ordenação relativa de duas regras em um filtro não é nem trivial nem
+irrelevante vai gerar uma anomalia. Além disso, o desempenho de um filtro é
+inversamente proporcional ao número de regras presente, e por isso vamos também
+gerar anomalias para regras desnecessárias.
+
+A partir da relação entre os conjuntos de datagramas das regras (sub-conjunto,
+super-conjunto, igualdade ou disjunção), da sua ordem no filtro e da sua ação,
+as anomalias isoladas são definidas:
+\begin{itemize}
+	\item Invisibilidade: quando todos os datagramas selecionados por uma regra
+		já foram selecionados por regras anteriores - ou seja, a regra nunca vai
+		selecionar nenhum datagrama na posição atual.
+	\item Conflito: quando o conjunto de datagramas selecionados por duas regras
+		com ações diferentes possui uma interseção não-vazia, a regra na posição
+		superior não é um subconjunto da regra inferior, e essa interseção não
+		está totalmente contida em uma terceira regra superior a ambas. Nessas
+		condições, a troca da ordem dessas duas regras não geraria nenhuma
+		anomalia e o comportamento do filtro seria alterado. Para efeito de
+		comparação: se a regra superior for um subconjunto da regra inferior, a
+		troca da ordem vai gerar uma anomalia de invisibilidade.
+	\item Redundância: quando uma regra, mesmo selecionando pacotes devido à sua
+		posição, poderia ser removida sem alteração no comportamento do filtro.
+		Isso indica que todos os pacotes selecionados pela regra redundante são
+		selecionados também por regras inferiores com a mesma ação. Normalmente,
+		a regra é desnecessária mesmo ou há uma ação incorreta em alguma regra.
+\end{itemize}
+
+A anomalia de conflito aponta ambiguidades na ordenação das regras, enquanto que
+as anomalias de invisibilidade e redundância apontam regras desnecessárias. Em
+um filtro sem anomalias, qualquer troca na ordem de duas regras vai ou gerar uma
+anomalia ou não ter efeito no comportamento do filtro. Isso facilita muito a
+manutenção dessas regras pelo administrador de rede, que pode otimizar o filtro
+passando as regras mais importantes para o topo sem medo dos potenciais efeitos
+colaterais.
+
+Com relação aos trabalhos de Al-Shaer e Hamed, que também definem anomalias para
+regras em filtros isolados, podemos apontar os seguintes pontos como vantagens
+das anomalias do presente trabalho:
+\begin{itemize}
+	\item Visão das regras no contexto geral: a análise das regras é feita
+		dentro do contexto do filtro, e não duas-a-duas. Com isso, não são
+		apontadas anomalias que não aparecem no resultado do filtro. Por
+		exemplo: se um conflito diz respeito a datagramas que são todos
+		selecionados por uma regra superior as duas regras conflitantes, ele não
+		é reportado. Isso evita falsos positivos.
+	\item Possibilidade de remoção de todas as anomalias: as anomalias foram
+		projetadas de forma a permitir sua remoção através da inserção, remoção
+		e alteração da ordem das regras e de sua ação. Com isso, é
+		possível ``corrigir'' qualquer filtro. No trabalho de Al-Shaer e Hamed,
+		algumas anomalias são inerentes ao comportamento desejado para o filtro.
+\end{itemize}
+
+
+
+\section{Anomalias distribuídas}
+
+Para a análise das anomalias distribuídas, é necessário ter a topologia completa
+da rede, além das regras de cada filtro. A rede é modelada como um grafo, no
+qual os nós são os filtros e roteadores, e as arestas são as redes que os ligam.
+Cada datagrama possui uma origem e um destino dentro deste grafo, mas muitas
+vezes há vários caminhos intermediários possíveis. Neste trabalho, consideramos
+que todos os caminhos devem apresentar as mesmas permissões para o datagrama:
+ou a passagem é permitida em todos os caminhos ou proibida. Com isso, a rede se
+torna mais robusta à falhas, já que a falha de um filtro não vai impedir um
+acesso que antes era possível ou pior, permitir um acesso anteriormente
+proibido.
+Anomalias distribuídas são, por isso, casos nos quais a permissão para
+determinados datagramas difere dependendo do caminho que este tomar:
+
+\begin{itemize}
+	\item Discordância: quando o filtro mais próximo de uma rede possui uma ação
+		para determinados datagramas que difere da ação do filtro mais próximo
+		da rede de destino desses datagramas. Não há como saber qual dos dois
+		filtros possui a ação correta, que deve ser verificada pelo
+		administrador. Se mais de um filtro puder ser o primeiro (ou último)
+		para determinados datagramas, todos estes filtros devem também
+		concordar.
+	\item Bloqueio: quando o filtro mais próximo da rede de origem e o filtro
+		mais próximo da rede de destino de determinados datagramas concordam que
+		estes devem ser aceitos, mas um filtro intermediário os descarta.
+		Provavelmente a ação incorreta é a deste filtro intermediário.
+	\item Vazamento: quando o filtro mais próximo da rede de origem e o filtro
+		mais próximo da rede de destino de determinados datagramas concordam que
+		estes devem ser descartados, mas há um caminho alternativo comporto
+		apenas por roteadores - que são modelados como filtros que não descartam
+		nenhum datagrama. Neste caso, alguns datagramas podem passar dependendo
+		das condições da rede, por isso o ``vazamento.''
+	\item Irrelevância: dada a topologia da rede, só um conjunto limitado de
+		datagramas vai passar por cada filtro. A irrelevância aponta regras que
+		selecionam apenas datagramas que estão fora desse conjunto, e que são,
+		por isso, desnecessárias. O contraste com a redundância aparece no fato
+		da irrelevância usar o conhecimento da topologia da rede para analisar
+		as regras.
+\end{itemize}
+
+As anomalias distribuídas, assim como as isoladas, sempre podem ser eliminadas
+através da manipulação das regras. Uma rede livre de anomalias garante que não
+haverá alteração na acessibilidade na presença de falhas ou tráfego intenso.
+Manter a rede sem anomalias também facilita a manutenção, já que a alteração de
+um filtro vai gerar anomalias que apontam para todos os outros filtros que
+precisam ser alterados para que a rede fique consistente novamente.
+
+O modelo e a definição das anomalias distribuídas é a principal contribuição
+do presente trabalho. Até o momento, não havia nenhum outro trabalho na
+literatura que analisasse de forma algébrica as regras de uma rede inteira com
+diversos filtros.
+
+
+
+\section{Asserções e o protótipo PFC}
+
+As anomalias verificam a consistência e o minimalismo da rede e das regras dos
+filtros de pacotes. Contudo, elas não garantem que o comportamento implementado
+é o desejado.
+
+Asserções são um mecanismo simples que podem ser usado para verificar o
+comportamento da rede. Possuem a mesma sintaxe de uma regra: um conjunto de
+pacotes e uma ação. Contudo, as asserções são verificadas sobre o comportamento
+global da rede. Ou seja, depois de todas anomalias reportadas, é reportado um
+erro para cada asserção que não corresponder ao implementado. Dessa forma, o
+administrador da rede pode implementar ``testes de unidade'' do comportamento da
+rede e ter mais garantias ainda quando precisar fazer uma manutenção.
+
+Para verificar as asserções e as anomalias, foi criado um protótipo que
+implementa os algoritmos desenvolvidos. O \emph{Packet Filter Checker} (PFC)
+recebe a topologia da rede e as regras de cada filtro, e gera um relatório com
+todas as anomalias e erros de asserção encontrados. O PFC tem também a
+capacidade de gerar diversos outros artefatos, como os gráficos usados no
+decorrer deste trabalho. Seu uso pode ser observado melhor no capítulo
+\ref{casestudy}, que demonstra o caso de uso.
+
+
+
+\end{otherlanguage}
+

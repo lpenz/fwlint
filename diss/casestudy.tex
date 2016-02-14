@@ -1,0 +1,318 @@
+
+\newcommand{\myrule}[1]{{\tt{#1}}}
+\newcommand{\myfilter}[1]{{\tt{#1}}}
+\newcommand{\myassertion}[1]{{\tt{#1}}}
+\newcommand{\mynet}[1]{{\tt{#1}}}
+
+{\color{white} \cite{knuth1}}
+
+\section{Introduction}
+
+A case study is presented in this chapter.
+
+The case study is an artificial example. As the most interesting and non-obvious
+problems of a network arise in the presence of changes, the case study is
+divided in iterations. Each iteration changes the network and the requirements
+before implementing a naïve solution that will be checked with PFC and then fixed.
+
+Assertions are used along a security policy to verify the implementation's
+conformance.
+
+
+
+\section{Case 1: single filter}
+
+Misc. Inc. started out as a small company. At the beginning, we had only a small
+handful of computers connected to a switch. As the company grew, security became
+an issue. After a virus wiped out our customer's information, the company decided to
+specialize roles, split the network and develop a security policy.
+
+The network got divided by functionality and access requirements. Servers were put in
+two networks: one for the IT servers (mail, file, proxy, web server) and one for the
+main servers. Users were put in a third network.
+The topology can be seen in figure \ref{fig:case1naive:topo}.
+
+The security policy stated that:
+\begin{itemize}
+	\item every network has access to the mail server (IT);
+	\item internet web access is filtered by a proxy (IT) that can access the
+		internet;
+	\item the web server (IT) can be accessed from the internet;
+	\item the other servers should not be able to initiate connections;
+	\item users have complete access to the main servers and the file server;
+	\item users can only access the internet through the proxy.
+\end{itemize}
+
+\begin{figure}
+	\imagenorm{case1naive.pdf}
+	\caption{\label{fig:case1naive:topo}Topology of case 1}
+\end{figure}
+
+
+
+\subsection{Naïve solution}
+
+The IP address allocation follows. Networks have their first letter capitalized;
+server networks and hosts end in an {\tt{S}}; filters end in {\tt{F}} and routers
+in {\tt{R}}.
+
+\input{case1naive_aliases.tex}
+
+The direct translation of the security policy results in the following
+description:
+
+\input{case1naive.tex}
+
+Figure \ref{fig:case1naive:profile} shows the profile of the filter, figure
+\ref{fig:case1naive:tree} shows the tree of rules.
+
+\begin{figure}
+	\imagefit{case1naive_profile.pdf}
+	\caption{\label{fig:case1naive:profile}Profile of the naïve solution of case 1}
+\end{figure}
+
+\begin{figure}
+	\imagefit{case1naive_ruletree.pdf}
+	\caption{\label{fig:case1naive:tree}Tree of rules of the naïve solution of case 1}
+\end{figure}
+
+
+PFC found the following anomalies:
+
+
+\verbatiminput{case1naive.res}
+
+
+It is easy to see that the invisibility of rule \myrule{Users2Proxy} and its
+consequent irrelevancy is due to the fact that the file server and proxy server
+are the same physical machine, and the more general rule (\myrule{Users2File})
+comes first in the filter.
+
+On the other hand, the conflicts with the \myrule{NoServer} rule happen because
+the rules \myrule{Mail} and \myrule{Web} allow the main servers to connect to
+the mail and web servers, and that is against the security policy.
+
+At last, the redundancy of rule \myrule{NoServer} is pointed out because its
+effect is already provided by the \myrule{Default} rule.
+
+In the next section a proper solution is developed.
+
+
+
+\subsection{Proper solution}
+
+A simple fix for the problems found in the naïve solution is to remove the rules
+\myrule{Users2Proxy} and \myrule{NoServer}. Even though the first rule may be
+safely removed, the second rule points to a real conflict between what was
+implemented and the security policy.
+
+A better approach is to transform both rules into \emph{assertions}, as they are
+both correct and must be globally valid: the first rule is invisible only because the
+file server and the proxy server are accessed through the same IP address; the
+second rule is really redundant, but verifies the filter implementation.
+
+After converting both rules to assertions, the assertion \myassertion{NoServer}
+fails. To fix that, three rules are implemented: \myrule{NoServer2Mail} and
+\myrule{NoServer2Web}, to prevent all servers from accessing the mail and web
+server and to prevent the proxy server from accessing the main server. The
+output of PFC is then:
+
+\verbatiminput{case1proper.res}
+
+It's interesting to note that the isolated analysis of this filter would point
+out that the rule \myrule{NoProxy2Server} conflicts with the rules \myrule{Mail} and
+\myrule{Web}. However, these conflicts are filtered out as the conflicting
+datagrams are all within a single interface and would not go through the filter.
+
+The final rule set is:
+
+\input{case1proper.tex}
+
+Figure \ref{fig:case1proper:profile} show the profile of this solution. The
+tree of rules of the proper solution ca be seen in figure
+\ref{fig:case1proper:tree}.
+
+\begin{figure}
+	\imagefit{case1proper_profile.pdf}
+	\caption{\label{fig:case1proper:profile}Profile of the proper solution of case 1}
+\end{figure}
+
+\begin{figure}
+	\imagefit{case1proper_ruletree.pdf}
+	\caption{\label{fig:case1proper:tree}Tree of rules of the proper solution of case 1}
+\end{figure}
+
+
+
+
+\section{Case 2: Multiple filters}
+
+That solution has worked very well until we had a critical failure on
+a component that had to be replaced. As we were in a position where
+network downtime was very expensive, we decided that the best course of action
+was to increase redundancy and to buy 3 filters. Those would be placed in a
+security-minded arrangement, with a replacement priority; that is, if the
+internal filter failed, it would be replaced with the internet filter while the
+faulty filter was fixed. The new topology can be seen in figure
+\ref{fig:case2naive:topo}.
+
+\begin{figure}
+	\imagefit{case2naive_dot.pdf}
+	\caption{\label{fig:case2naive:topo}Topology of case 2}
+\end{figure}
+
+\subsection{Naïve solution}
+
+To make a safe transition, the IT department decided to replicate the old
+filter's rules in all filters and remove the rules that were related to networks
+not directly connected. They also noticed that assertions were a good thing and
+coded some more. The initial setup can be seen below:
+
+\input{case2naive.tex}
+
+\begin{figure}
+	\imagefit{case2naive_profile.pdf}
+	\caption{\label{fig:case2naive:profile}Profile of the naïve solution of case 2}
+\end{figure}
+
+PFC found the following problems:
+
+\verbatiminput{case2naive.res}
+
+Although the solution implements the desired behaviour, it is nowhere
+near minimal, and has some other issues.
+
+The first problems are the disagreements. They are reported because even though
+\myfilter{ITUsersF} is not connected to \mynet{MainS}, it must agree with
+\myfilter{InternalF} on whether the mail and web servers can connect to the main
+servers. To fix it, we add \myrule{NoServer2Mail} and \myrule{NoServer2Web} to
+\myfilter{ITUsersF}.
+
+Following the disagreements, some irrelevant rules are pointed out. It is safe
+to remove the corresponding rules.
+
+The last problem is the assertion failure. It happens because, as in the
+single filter case, the proxy and the file server are the same PC. This time it
+is better to split them for the sake of security than remove the assertion.
+
+
+
+\subsection{Proper solution}
+
+After removing the irrelevant rules, the following result is generated:
+
+\verbatiminput{case2proper0.res}
+
+Besides the redundant rules, the failed assertions shows that now that the file
+server and proxy are not on the same machine, an explicit rule for the proxy is
+needed. We remove the redundant rules, and add the proxy rule to get:
+
+\verbatiminput{case2proper1.res}
+
+The profile is displayed in figure \ref{fig:case2proper1:profile}. It is easy to
+see that the profile is equivalent to the final profile of the single filter
+case (figure \ref{fig:case1proper:profile}), except for the proxy/file
+server split.
+
+The final setup is below:
+
+\begin{figure}
+	\imagefit{case2proper1_profile.pdf}
+	\caption{\label{fig:case2proper1:profile}Profile of the proper solution of case 2}
+\end{figure}
+
+\input{case2proper1.tex}
+
+By increasing the number of filters with a carefully thought topology, we have
+not only increased security but also decreased the complexity of each filter,
+making maintenance easier.
+
+
+
+\section{Case 3: Even more redundancy}
+
+Even though the current setup allows a filter to fail without compromising the
+whole network, it was decided that even more redundancy was desired. The
+extreme filters \myfilter{InternetF} and \myfilter{InternalF} were then
+connected, and a router between \mynet{Users} and \mynet{MainS} was deployed.
+The resulting topology can be seen in figure \ref{fig:case3naive:topo}.
+
+\begin{figure}
+	\imagefit{case3naive.pdf}
+	\caption{\label{fig:case3naive:topo}Topology of case 3}
+\end{figure}
+
+This setup prevents the loss of connectivity between \mynet{Users} and the
+internet when the filter \myfilter{ITUsersF} fails and between \mynet{Users} and
+\mynet{MainS} when the filter \myfilter{InternalF} fails.
+
+
+
+\subsection{Naïve solution}
+
+Keeping the current rule set generates the profile in figure
+\ref{fig:case3naive:profile}. PFC reports:
+
+\verbatiminput{case3naive.res}
+
+Now that \myfilter{InternalF} is connected to \myfilter{InternetF}, they must
+agree on the profile of the IT servers network. The last 7 disagreements are
+reported because of this. The other disagreement is reported because
+\myfilter{ITUsersF} does not allow the proxy to access the internet. With the new
+connection, that is a possible path, and will be used if the port of
+\myfilter{InternetF} that connects it to \mynet{ITS} fails.
+
+Moving on to the blocks, it is easy to see that they are reported because the
+filters do now allow the traffic that previously would not go through them:
+\myfilter{InternalF} must support IT and internet traffic;
+\myfilter{ITUsersF} and \myfilter{InternetF} must support the traffic to
+\mynet{MainS}.
+
+On the other hand, the leak reported was caused by the presence of a router in
+parallel with \myfilter{InternalF}. That filter did not allow traffic from the
+servers into the user network, but the router does. The only solution in this
+case is to replace the router with a filter or eliminate the router completely.
+We will do the former.
+
+At last, the assertion problem was caused by the disagreements, that prevent
+proper assertion evaluation.
+
+\begin{figure}
+	\imagefit{case3naive_profile.pdf}
+	\caption{\label{fig:case3naive:profile}Profile of the naïve solution of case 3}
+\end{figure}
+
+
+
+\subsection{Proper solution}
+
+Now, there is so much redundancy, that almost every path is a possible one. The
+best course of action is to replicate the rules of the single filter case in
+every filter, including the new \myfilter{InternalF2} which replaced
+\myfilter{InternalR}. That makes PFC give us:
+
+\verbatiminput{case3proper0.res}
+
+That, of course, happened because the IP address of the proxy was changed in
+case 2. Adding the rule \myrule{Users2Proxy} to every filter, we get from PFC:
+
+\verbatiminput{case3proper1.res}
+
+The profile can be seen in figure \ref{fig:case3proper1:profile}, the topology is
+in figure \ref{fig:case3proper1:topo}, while the complete setup is below.
+
+\input{case3proper1.tex}
+
+\begin{figure}
+	\imagefit{case3proper1_profile.pdf}
+	\caption{\label{fig:case3proper1:profile}Profile of the proper solution of case 3}
+\end{figure}
+
+\begin{figure}
+	\imagefit{case3proper1.pdf}
+	\caption{\label{fig:case3proper1:topo}Topology of the proper solution of case 3}
+\end{figure}
+
+
+% vim: ft=tex spelllang=en
+

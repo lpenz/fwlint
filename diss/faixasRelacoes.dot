@@ -1,0 +1,25 @@
+digraph {
+	rankdir="LR"
+	disjuntas [ label="Disjoint\nX={x}\nY={y}" ]
+	disjuntasXxe [ label="Disjoint\nX={x,e}\nY={y}" ]
+	disjuntasYye [ label="Disjoint\nX={x}\nY={y,e}" ]
+	disjuntasXe [ label="Disjoint\nX={e}\nY={y}" ]
+	disjuntasYe [ label="Disjoint\nX={x}\nY={e}" ]
+	disjuntas -> disjuntasXxe [ label="X U {e}"]
+	disjuntas -> disjuntasYye [ label="Y U {e}"]
+	disjuntasXxe -> disjuntasXe [ label="X - {x}" ]
+	disjuntasYye -> disjuntasYe [ label="Y - {y}" ]
+	correlacionadas [ label="Correlated\nX={x,e}\nY={y,e}" ]
+	disjuntasXxe -> correlacionadas [ label="Y U {e}" ]
+	disjuntasYye -> correlacionadas [ label="X U {e}" ]
+	disjuntasXe -> subconjunto [ label="Y U {e}" ]
+	disjuntasYe -> superconjunto [ label="X U {e}" ]
+	superconjunto [ label="Superset\nX={x,e}\nY={e}" ]
+	subconjunto [ label="Subset\nX={e}\nY={y,e}" ]
+	correlacionadas -> superconjunto [ label="Y - {y}" ]
+	correlacionadas -> subconjunto [ label="X - {x}" ]
+	iguais [ label="Equal\nX={e}\nY={e}" ]
+	superconjunto -> iguais [ label="X - {x}"]
+	subconjunto -> iguais [ label="Y - {y}" ]
+}
+

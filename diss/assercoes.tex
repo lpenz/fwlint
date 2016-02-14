@@ -1,0 +1,81 @@
+
+
+
+\section{Introduction}
+
+Up to this point, PFC is able to detect contradictions and other
+problems in an algebraic way, considering the set of rules implemented and the
+current network topology.
+
+It is interesting to provide a mechanism to perform a
+functional verification of the filter, that is, to test if the filter in fact
+conforms to its specification.
+
+This is done with \emph{assertions}.
+
+
+
+\section{Requirements}
+
+The set of assertions will also be provided as input to PFC, in addition to the
+set of rules and the network topology.
+
+Assertions will be simple verifications of the overall filter behaviour. They
+are checked after the algebraic verifications, and their violation is reported with
+the anomalies.
+
+
+
+\section{Model}
+
+Each assertion has the same format of a rule, being composed of a match and a
+target.
+\begin{equation*}
+	assertion =
+	\begin{cases}
+		match & \in Regionsets \\
+		action & \in \{ \mbox{accept}, \mbox{deny} \}
+	\end{cases}
+\end{equation*}
+
+Unlike rules, though, assertions must be globally true, all of them,
+simultaneously. Assertions must hold in the global accessibility profile,
+as that guarantees that assertions hold globally when there are no anomalies.
+
+
+
+\section{Errors}
+
+As assertions are not part of the implemented topology, they do not generate
+anomalies, but \defpar{assertions errors}.
+
+Assertions are first checked among themselves. As all assertions must hold
+globally, the error of
+\defpar[assertion!]{contradiction} is reported for assertions that contradict one
+another.
+
+If an assertion does not hold, an assertion \defpar[assertion!]{violation} error is
+reported.
+
+
+
+\section{Algorithm}
+
+Assertion verification is performed the same way rule disagreement is checked.
+See algorithm \ref{alg:checkonepath} for the high-level reference.
+
+
+
+\section{Conclusion}
+
+Assertions are a simple mechanism for filter conformance checking.
+
+They can also help evaluate the impact of a specification change, help
+with its implementation and help in regression testing.
+
+Assertions can be compared to unit testing for packet filter configuration.
+
+
+
+% vim: ft=tex spelllang=en
+

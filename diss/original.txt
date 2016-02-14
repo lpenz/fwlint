@@ -1,0 +1,588 @@
+Relevant rules are the rules that either appear on the correct accessibility profile or that prevent the blocking anomaly in an intermediate filter. That means that after checking for disagreements and blocks, all relevant rules are already removed from the candidate set. Therefore, after these verifications, all rules left in the candidate set are reported as irrelevant. 
+That implies that rules that block packets that are already blocked by a previous filter in the path are irrelevant, as are rules that accept packets that are already blocked. 
+Formally: 
+                                Irrelevant   
+
+Example: 
+* Filter F1: 
+r1from 10.0.0.0/24to 10.1.0.0/24Acceptdefaultfrom anyto anyDenyPFC output: 
+
+Irrelevant rule r1 in filter F1
+Figure Figure 5.8:: Topology of the irrelevancy example.Figure 5.8 shows the network topology of this example. 
+It is interesting to note that there is a hierarchy of distributed anomalies. If there is a disagreement anomaly, the correct accessibility profile is undefined and the other anomalies can't be checked. If there is a blocking anomaly, the irrelevancy checking will not be complete and can give false positives. 
+Figure Figure 5.9:: Hierarchy of the distributed anomalies7 Algorithms 
+The main loop of the algorithm iterates on all possible unique paths that can be found in the graph. 
+
+Statement 7.1   The maximum number of paths happens when every router is connected to every other router by a dedicated network. By using the binomial theorem, we have that the maximum number of paths is . 
+The longest path has all the routers, and thus length .
+
+Statement 7.2   Every router being connected with every other is also the condition where the maximum number of inner networks is found: 
+The condition required by these theoretical values is not likely to happen in practice for a system with a high number of routers, as every new router added to the network would require a connection to every other, and router ports are limited. 
+On the other hand, even though the number of terminal networks is bounded by the number of router ports, this bound is an external factor and changes as the router market changes. So, in this work, the maximum number of terminal networks is not assumed to be bounded by the number of routers, it is only assumed to be much greater than it. 
+With that in mind, there is a matter of balance to be decided. The algorithm has to analyse all paths as well as every pair of networks. This raises two options: 
+* iterate on all pairs of networks; for each pair, find all connecting paths; 
+* iterate on all paths; for each path, store information for every network connected by the path. 
+Equation 5.1 says that the number of paths is expected to be less than the number of pairs of networks. This leads to the choice to favor the second option, that sacrifices memory to save time. The algorithm, then: 
+1. builds the list of paths; 
+2. for all paths, lifts the accessibility profile for every connected network, checks disagreements and blocks and remove the used rules from the irrelevant candidates list; 
+3. all rules left in the list of irrelevant candidates are reported as irrelevant; 
+4. for all paths made only by plain routers, uses the global accessibility profile lifted from the second step to check for leaks. 
+Details on every step and their cost are presented next. 
+1 List of paths construction 
+The algorithm used to build the list of paths is a simple depth-first traversal for each node. No optimization reduces the order of this algorithm. 
+From [CORMEN et al.(2001)CORMEN; LEISERSON; RIVEST; STEIN], the cost of depth-first traversal is . As the model has the routers as vertices and the inner networks as edges, and knowing that the maximum number of inner networks is from statement 5.7.2, statement 5.7.3 summarizes the cost of the process. 
+
+Statement 7.3   The cost of building the list of paths is the product of the number of nodes multiplied by the cost of the depth-first traversal: 
+cost(DFT) 
+cost(DFT)
+2 Disagreements, blocks and leaks 
+After building the list of paths, the first three anomalies can be checked. 
+Algorithms 7, 8, 9 and 10 form a high-level representation of the checking. The algorithms lack features such as proper report of anomalies with the rules involved, skipping of already reported anomalies and language-specific optimizations. 
+1 Complexity 
+The cost of building the profile (algorithm 8) unfortunately depends on the number of networks attached to the router, and that is unavoidable. The profile has all the intersecting regions of the first filter's rule with the networks present in the first router as source and the networks present in the last routers as destination. 
+It is known from statement 4.6.3 that the maximum number of disjoints regions in a filter is in the worst case. It is enough to take the intersection from each network with each of these regions. Therefore, the number of regions in the correct accessibility profile for a single path is in networks in first routernetworks in last router in the worst case, where is the number of rules in the first filter. 
+If every router has the same number of ports and the ports are all in use (worst case), then the number of networks in each router is the same number . Theorem 5.7.4 summarizes the conclusion reached with this assumption: 
+
+Statement 7.4   The number of region in the correct accessibility profile for each path is in 
+
+That is also the time and space cost of building the profile.
+The cost of checking one path is in routers in path   profile size of path. In the worst case, every router is connected to every other, and the number of routers in any path is equal to the number of routers, leading to statement 5.7.5: 
+
+Statement 7.5   The cost of checking one path is, in the worst case 
+
+The process has no space requirements of its own, though, requiring only the profile to be present.
+Another implication of having every router connected to every other router is that the number of paths is in . Joining this fact with statements 5.7.1, 5.7.4, and 5.7.5 we get to statement 5.7.6: 
+
+Statement 7.6   The cost in time of checking all paths can be determined to be, in the worst case: 
+
+The cost in memory is the cost of the list of paths plus the cost of one profile, and that is .
+The cost in memory will be dominated by the second parcel most of the time, as the tendency is to have a few routers with many rules and networks because of the monetary cost of routers. 
+
+
+
+
+
+
+
+
+3 Irrelevancies 
+As all relevant rules are removed from the list of candidates while checking disagreements and blocks, the irrelevancy checks in fact only reports the rules that are still in the list. This has minimal memory and time cost, if the number of irrelevant rules are small. 
+The absence of irrelevant rules testify the minimality of the rules in the filters. 
+8 The Internet 
+There is a special case in the filter analysis that corresponds to the internet. 
+When the system administrator defines a network interface of a router as connected to the internet, the checker does two things: first, it considers every network that is not present anywhere else in the topology as connected to that interface. Secondly, even if there are many internet connections, the checker does not consider any path that has such interface as an edge. That is justified by the fact that the network administrator will probably never have internal packets travel from one edge of his network to the other using an external connection. The internet is modelled as a network interface that is connected to every network that is not present in the system. 
+These considerations are not present in the shown algorithms because they are made mostly as a pre-processing stage and as a verification in the list of paths construction, which is also not shown. 
+6 Assertions 
+1 Introduction 
+Up to this point, PFC is able to detect contradictions and other problems in an algebraic way, considering the set of rules implemented and the current network topology. 
+It is interesting to provide a mechanism to perform a functional verification of the filter, that is, to test if the filter in fact conforms to its specification. 
+This is done with assertions. 
+2 Requirements 
+The set of assertions will also be provided as input to PFC, in addition to the set of rules and the network topology. 
+Assertions will be simple verifications of the overall filter behaviour. They are checked after the algebraic verifications, and their violation is reported with the anomalies. 
+3 Model 
+Each assertion has the same format of a rule, being composed of a match and a target. 
+   
+
+Unlike rules, though, assertions must be globally true, all of them, simultaneously. Assertions must hold in the global accessibility profile. In the absence of other anomalies, that guarantees that they hold globally. 
+4 Errors 
+As assertions are not part of the implemented topology, they do not generate anomalies, but assertions errors. 
+Assertions are first checked among themselves. As all assertions must hold globally, the error of contradiction is reported for assertions that contradict one another. 
+If an assertion does not hold, an assertion violation error is reported. 
+5 Algorithm 
+Assertion verification is performed the same way rule disagreement is checked. See algorithm 9 for the high-level reference. 
+6 Conclusion 
+Assertions are a simple mechanism for filter conformance checking. 
+They can also help the evaluation of the impact of a specification change, help in its implementation and help in regression testing. 
+Assertions can be compared to unit testing for packet filter configuration. 
+7 Case study 
+[KNUTH(1997)KNUTH] 
+1 Introduction 
+A case study is presented in this chapter. 
+The case study is an artificial example. As the most interesting and non-obvious problems of a network arise in the presence of changes, the case study is divided in iterations. Each iteration changes the network and the requirements before implementing a naïve solution that will be checked with PFC and then fixed. 
+Assertions are used along a security policy to verify the implementation's conformance. 
+2 Case 1: single filter 
+Misc. Inc. started out as a small company. At the beginning, we had only a small handful of computers connected to a switch. As the company grew, security became an issue. After a virus wiped out our customer's information, the company decided to specialize roles, split the network and develop a security policy. 
+The network got divided by functionality and access requirements. Servers were put in two networks: one for the IT servers (mail, file, proxy, web server) and one for the main servers. Users were put in a third network. The topology can be seen in figure 7.1. 
+The security policy stated that: 
+* every network has access to the mail server (IT); 
+* internet web access is filtered by a proxy (IT) that can access the internet; 
+* the web server (IT) can be accessed from the internet; 
+* the other servers should not be able to initiate connections; 
+* users have complete access to the main servers and the file server; 
+* users can only access the internet through the proxy. 
+Figure Figure 7.1:: Topology of case 11 Naïve solution 
+The IP address allocation follows. Networks have their first letter capitalized; server networks and hosts end in an S; filters end in F and routers in R. 
+Users10.0.0.0/24 MainS10.1.0.0/24 ITS10.1.1.0/24 Internal10.0.0.0/8 All0.0.0.0/0 webS10.1.1.2 mailS10.1.1.3 fileS10.1.1.4 proxyS10.1.1.4 The direct translation of the security policy results in the following description: 
+* Filter SingleF: 
+Mailfrom anyto 10.1.1.3/32:23AcceptWebfrom anyto 10.1.1.2/32:80AcceptNoProxy2Internalfrom 10.1.1.4/32to 10.0.0.0/8DenyProxyAfrom 10.1.1.4/32to anyAcceptNoServerfrom MainSto anyDenyUsers2Mainfrom Usersto MainSAcceptUsers2Filefrom Usersto 10.1.1.4/32AcceptUsers2Proxyfrom Usersto 10.1.1.4/32:3180AcceptDefaultfrom anyto anyDenyFigure 7.2 shows the profile of the filter, figure 7.3 shows the tree of rules. 
+Figure Figure 7.2:: Profile of the naïve solution of case 1
+Figure Figure 7.3:: Tree of rules of the naïve solution of case 1PFC found the following anomalies: 
+
+SingleF:
+  Invisible rule Users2Proxy
+  Conflict rule Web rule NoServer
+    at [src 10.1.0.0/24 dst 10.1.1.2/32:80]
+  Conflict rule Mail rule NoServer
+    at [src 10.1.0.0/24 dst 10.1.1.3/32:23]
+  Redundant rule NoServer
+Irrelevant rule Users2Proxy in filter SingleF
+It is easy to see that the invisibility of rule Users2Proxy and its consequent irrelevancy is due to the fact that the file server and proxy server are the same physical machine, and the more general rule (Users2File) comes first in the filter. 
+On the other hand, the conflicts with the NoServer rule happen because the rules Mail and Web allow the main servers to connect to the mail and web servers, and that is against the security policy. 
+At last, the redundancy of rule NoServer is pointed out because its effect is already provided by the Default rule. 
+In the next section a proper solution is developed. 
+2 Proper solution 
+A simple fix for the problems found in the naïve solution is to remove the rules Users2Proxy and NoServer. Even though the first rule may be safely removed, the second rule points to a real conflict between what was implemented and the security policy. 
+A better approach is to transform both rules into assertions, as they are both correct and must be globally valid: the first rule is invisible only because the file server and the proxy server are accessed through the same IP address; the second rule is really redundant, but verifies the filter implementation. 
+After converting both rules to assertions, the assertion NoServer fails. To fix that, three rules are implemented: NoServer2Mail and NoServer2Web, to prevent all servers from accessing the mail and web server and to prevent the proxy server from accessing the main server. The output of PFC is then: 
+
+No anomalies or errors found
+It's interesting to note that the isolated analysis of this filter would point out that the rule NoProxy2Server conflicts with the rules Mail and Web. However, these conflicts are filtered out as the conflicting datagrams are all within a single interface and would not go through the filter. 
+The final rule set is: 
+* Filter SingleF: 
+NoServer2Mailfrom MainSto 10.1.1.3/32:23DenyNoServer2Webfrom MainSto 10.1.1.2/32:80DenyMailfrom anyto 10.1.1.3/32:23AcceptWebfrom anyto 10.1.1.2/32:80AcceptNoProxy2Internalfrom 10.1.1.4/32to 10.0.0.0/8DenyProxyAfrom 10.1.1.4/32to anyAcceptUsers2Mainfrom Usersto MainSAcceptUsers2Filefrom Usersto 10.1.1.4/32AcceptDefaultfrom anyto anyDeny* Assertions: 
+Users2Proxyfrom Usersto 10.1.1.4/32:3180AcceptNoServerfrom MainSto anyDenyFigure 7.4 show the profile of this solution. The tree of rules of the proper solution ca be seen in figure 7.5. 
+Figure Figure 7.4:: Profile of the proper solution of case 1
+Figure Figure 7.5:: Tree of rules of the proper solution of case 13 Case 2: Multiple filters 
+That solution worked very well, but after some time we had a critical failure on a component that had to be replaced. As we were in a position where network downtime was very expensive, we decided that the best course of action was to increase the redundancy and buy 3 filters. Those would be placed in a security-minded arrangement, with a replacement priority; that is, if the internal filter failed, it would be replaced with the internet filter while the faulty filter was fixed. The new topology can be seen in figure 7.6. 
+Figure Figure 7.6:: Topology of case 21 Naïve solution 
+To make a safe transition, the IT department decided to replicate the old filter's rules in all filters and remove the rules that were related to networks not directly connected. They also noticed that assertions were a good thing and coded some more. The initial setup can be seen below: 
+* Filter InternetF: 
+Mailfrom anyto 10.1.1.3/32:23AcceptWebfrom anyto 10.1.1.2/32:80AcceptNoProxy2Internalfrom 10.1.1.4/32to 10.0.0.0/8DenyProxyAfrom 10.1.1.4/32to anyAcceptDefaultfrom anyto anyDeny* Filter ITUsersF: 
+Mailfrom anyto 10.1.1.3/32:23AcceptWebfrom anyto 10.1.1.2/32:80AcceptNoProxy2Internalfrom 10.1.1.4/32to 10.0.0.0/8DenyProxyAfrom 10.1.1.4/32to anyAcceptUsers2Filefrom Usersto 10.1.1.4/32AcceptDefaultfrom anyto anyDeny* Filter InternalF: 
+NoServer2Mailfrom MainSto 10.1.1.3/32:23DenyNoServer2Webfrom MainSto 10.1.1.2/32:80DenyMailfrom anyto 10.1.1.3/32:23AcceptWebfrom anyto 10.1.1.2/32:80AcceptNoProxy2Internalfrom 10.1.1.4/32to 10.0.0.0/8DenyProxyAfrom 10.1.1.4/32to anyAcceptUsers2Mainfrom Usersto MainSAcceptUsers2Filefrom Usersto 10.1.1.4/32AcceptDefaultfrom anyto anyDeny* Assertions: 
+Users2Proxyfrom Usersto 10.1.1.4/32:3180AcceptUsers2MainSfrom Usersto MainSAcceptUsers2Mailfrom Usersto 10.1.1.2/32:80AcceptUsers2Webfrom Usersto 10.1.1.3/32:23AcceptUsers2Filefrom Usersto 10.1.1.4/32AcceptNoMailStartfrom 10.1.1.3/32to anyDenyNoWebStartfrom 10.1.1.2/32to anyDenyNoFileStartfrom 10.1.1.4/32to anyDenyNoProxyInternalfrom 10.1.1.4/32to 10.0.0.0/8DenyNoServerStartfrom MainSto anyDeny
+Figure Figure 7.7:: Profile of the naïve solution of case 2PFC found the following problems: 
+
+Disagreement
+    of   filter InternalF, rule NoServer2Mail
+    with filter ITUsersF, rule Mail
+    at   [src 10.1.0.0/24 dst 10.1.1.3/32:23]
+Disagreement
+    of   filter InternalF, rule NoServer2Web
+    with filter ITUsersF, rule Web
+    at   [src 10.1.0.0/24 dst 10.1.1.2/32:80]
+Irrelevant rule ProxyA in filter ITUsersF
+Irrelevant rule Mail in filter InternalF
+Irrelevant rule Web in filter InternalF
+Irrelevant rule ProxyA in filter InternalF
+Irrelevant rule Users2File in filter InternalF
+Assertion NoFileStart  violated at
+    [src 10.1.1.4/32]
+Even though the solution implements the desired behaviour, it is not anywhere near minimal, and has some other issues. 
+The first problems are the disagreements. They are reported because even though ITUsersF is not connected to MainS, it must agree with InternalF on whether the mail and web servers can connect to the main servers. To fix it, we add NoServer2Mail and NoServer2Web to ITUsersF. 
+Following the disagreements, some irrelevant rules are pointed out. It is safe to remove the corresponding rules. 
+The last problem is the assertion failure. That happens because, as in the single filter case, the proxy and the file server are the same PC. This time it is better to split them for the sake of security than remove the assertion. 
+2 Proper solution 
+After removing the irrelevant rules, the following result is generated: 
+
+ITUsersF:
+  Redundant rule NoProxy2Internal
+InternalF:
+  Redundant rule NoServer2Mail
+  Redundant rule NoServer2Web
+  Redundant rule NoProxy2Internal
+Assertion Users2Proxy  violated at
+    [src 10.0.0.0/24 dst 10.1.1.4/32:3180]
+Besides the redundant rules, the failed assertions shows that now that the file server and proxy are not on the same machine, an explicit rule for the proxy is needed. We remove the redundant rules, and add the proxy rule to get: 
+
+No anomalies or errors found
+The profile is displayed in figure 7.8. It is easy to see that the profile is equivalent to the final profile of the single filter case (figure 7.4), except for the proxy/file server split. 
+The final setup is below: 
+Figure Figure 7.8:: Profile of the proper solution of case 2* Filter InternetF: 
+Mailfrom anyto 10.1.1.3/32:23AcceptWebfrom anyto 10.1.1.2/32:80AcceptNoProxy2Internalfrom 10.1.1.4/32to 10.0.0.0/8DenyProxyAfrom 10.1.1.4/32to anyAcceptDefaultfrom anyto anyDeny* Filter ITUsersF: 
+NoServer2Mailfrom MainSto 10.1.1.3/32:23DenyNoServer2Webfrom MainSto 10.1.1.2/32:80DenyMailfrom anyto 10.1.1.3/32:23AcceptWebfrom anyto 10.1.1.2/32:80AcceptUsers2Proxyfrom Usersto 10.1.1.4/32:3180AcceptUsers2Filefrom Usersto 10.1.1.5/32AcceptDefaultfrom anyto anyDeny* Filter InternalF: 
+Users2Mainfrom Usersto MainSAcceptDefaultfrom anyto anyDeny* Assertions: 
+Users2Proxyfrom Usersto 10.1.1.4/32:3180AcceptUsers2MainSfrom Usersto MainSAcceptUsers2Mailfrom Usersto 10.1.1.2/32:80AcceptUsers2Webfrom Usersto 10.1.1.3/32:23AcceptUsers2Filefrom Usersto 10.1.1.5/32AcceptNoMailStartfrom 10.1.1.3/32to anyDenyNoWebStartfrom 10.1.1.2/32to anyDenyNoFileStartfrom 10.1.1.5/32to anyDenyNoProxyInternalfrom 10.1.1.4/32to 10.0.0.0/8DenyNoServerStartfrom MainSto anyDenyBy increasing the number of filters with a carefully thought topology, we have not only increased security but also decreased the complexity of each filter, making maintenance easier. 
+4 Case 3: Even more redundancy 
+Even though the current setup allows any filter to fail without compromising the whole network, it was decided that even more redundancy was desired. The extreme filters InternetF and InternalF were then connected, and a router between Users and MainS was deployed. The resulting topology can be seen in figure 7.9. 
+Figure Figure 7.9:: Topology of case 3This setup prevents the loss of connectivity between Users and the internet when the filter ITUsersF fails and between Users and MainS when the filter InternalF fails. 
+1 Naïve solution 
+Keeping the current rule set generates the profile in figure 7.10. PFC reports: 
+
+Disagreement
+    of   filter ITUsersF, rule Default
+    with filter InternetF, rule ProxyA
+    at   [src 10.1.1.4/32 dst 0.0.0.0-9.255.255.255,
+          src 10.1.1.4/32 dst 11.0.0.0-192.167.255.255,
+          src 10.1.1.4/32 dst 192.168.0.0/24,
+          src 10.1.1.4/32 dst 192.168.1.0-255.255.255.255]
+Disagreement
+    of   filter InternalF, rule Default
+    with filter ITUsersF, rule Mail
+    at   [src 10.0.0.0/24 dst 10.1.1.3/32:23,
+          src 192.168.0.0/24 dst 10.1.1.3/32:23]
+Disagreement
+    of   filter InternalF, rule Default
+    with filter ITUsersF, rule Users2File
+    at   [src 10.0.0.0/24 dst 10.1.1.5/32]
+Disagreement
+    of   filter InternalF, rule Default
+    with filter ITUsersF, rule Users2Proxy
+    at   [src 10.0.0.0/24 dst 10.1.1.4/32:3180]
+Disagreement
+    of   filter InternalF, rule Default
+    with filter ITUsersF, rule Web
+    at   [src 10.0.0.0/24 dst 10.1.1.2/32:80,
+          src 192.168.0.0/24 dst 10.1.1.2/32:80]
+Disagreement
+    of   filter InternalF, rule Default
+    with filter InternetF, rule Mail
+    at   [src 10.0.0.0/24 dst 10.1.1.3/32:23,
+          src 10.1.0.0/24 dst 10.1.1.3/32:23,
+          src 192.168.0.0/24 dst 10.1.1.3/32:23]
+Disagreement
+    of   filter InternalF, rule Default
+    with filter InternetF, rule Web
+    at   [src 10.0.0.0/24 dst 10.1.1.2/32:80,
+          src 10.1.0.0/24 dst 10.1.1.2/32:80,
+          src 192.168.0.0/24 dst 10.1.1.2/32:80]
+Disagreement
+    of   filter InternalF, rule Users2Main
+    with filter ITUsersF, rule Default
+    at   [src 10.0.0.0/24 dst 10.1.0.0/24]
+Block in filter InternalF
+    at [src 0.0.0.0-9.255.255.255 dst 10.1.1.2/32:80,
+        src 0.0.0.0-9.255.255.255 dst 10.1.1.3/32:23,
+        src 10.0.1.0-10.0.255.255 dst 10.1.1.2/32:80,
+        src 10.0.1.0-10.0.255.255 dst 10.1.1.3/32:23,
+        src 10.1.2.0-192.167.255.255 dst 10.1.1.2/32:80,
+        src 10.1.2.0-192.167.255.255 dst 10.1.1.3/32:23,
+        src 192.168.1.0-255.255.255.255 dst 10.1.1.2/32:80,
+        src 192.168.1.0-255.255.255.255 dst 10.1.1.3/32:23]
+Leak between MainS and Users in path [router InternalR]
+Assertion Users2Proxy  violated at
+    [src 10.0.0.0/24 dst 10.1.1.4/32:3180]
+Assertion Users2Mail  violated at
+    [src 10.0.0.0/24 dst 10.1.1.2/32:80]
+Assertion Users2Web  violated at
+    [src 10.0.0.0/24 dst 10.1.1.3/32:23]
+Assertion Users2File  violated at
+    [src 10.0.0.0/24 dst 10.1.1.5/32]
+Now that InternalF is connected to InternetF, they must agree on the profile of the IT servers network. The last 7 disagreements are reported because of this. The other disagreement is reported because ITUsersF does not allow the proxy to access the internet. With the new connection, that is a possible path, and will be used if the port of InternetF that connects it to ITS fails. 
+Moving on to the blocks, it is easy to see that they are reported because the filters do now allow the traffic that previously would not go through them: InternalF must support IT and internet traffic; ITUsersF and InternetF must support the traffic to MainS. 
+On the other hand, the leak reported was caused by the presence of a router in parallel with InternalF. That filter did not allow traffic from the servers into the user network, but the router does. The only solution in this case is to replace the router with a filter or eliminate the router completely. We will do the former. 
+At last, the assertion problem was caused by the disagreements, that prevent proper assertion evaluation. 
+Figure Figure 7.10:: Profile of the naïve solution of case 32 Proper solution 
+There is so much redundancy now that almost every path is a possible path. The best course of action is to replicate the rules of the single filter case in every filter, including the new InternalF2 that replaced InternalR. That makes PFC give us: 
+
+Assertion Users2Proxy  violated at
+    [src 10.0.0.0/24 dst 10.1.1.4/32:3180]
+That, of course, happened because the IP address of the proxy was changed in case 2. Adding the rule Users2Proxy to every filter, we get from PFC: 
+
+No anomalies or errors found
+The profile can be seen in figure 7.11, the topology is in figure 7.12, while the complete setup is below. 
+* Filter InternetF: 
+NoServer2Mailfrom MainSto 10.1.1.3/32:23DenyNoServer2Webfrom MainSto 10.1.1.2/32:80DenyMailfrom anyto 10.1.1.3/32:23AcceptWebfrom anyto 10.1.1.2/32:80AcceptNoProxy2Internalfrom 10.1.1.4/32to 10.0.0.0/8DenyProxyAfrom 10.1.1.4/32to anyAcceptUsers2Mainfrom Usersto MainSAcceptUsers2Filefrom Usersto 10.1.1.5/32AcceptUsers2Proxyfrom Usersto 10.1.1.4/32:3180AcceptDefaultfrom anyto anyDeny* Filter ITUsersF: 
+NoServer2Mailfrom MainSto 10.1.1.3/32:23DenyNoServer2Webfrom MainSto 10.1.1.2/32:80DenyMailfrom anyto 10.1.1.3/32:23AcceptWebfrom anyto 10.1.1.2/32:80AcceptNoProxy2Internalfrom 10.1.1.4/32to 10.0.0.0/8DenyProxyAfrom 10.1.1.4/32to anyAcceptUsers2Mainfrom Usersto MainSAcceptUsers2Filefrom Usersto 10.1.1.5/32AcceptUsers2Proxyfrom Usersto 10.1.1.4/32:3180AcceptDefaultfrom anyto anyDeny* Filter InternalF: 
+NoServer2Mailfrom MainSto 10.1.1.3/32:23DenyNoServer2Webfrom MainSto 10.1.1.2/32:80DenyMailfrom anyto 10.1.1.3/32:23AcceptWebfrom anyto 10.1.1.2/32:80AcceptNoProxy2Internalfrom 10.1.1.4/32to 10.0.0.0/8DenyProxyAfrom 10.1.1.4/32to anyAcceptUsers2Mainfrom Usersto MainSAcceptUsers2Filefrom Usersto 10.1.1.5/32AcceptUsers2Proxyfrom Usersto 10.1.1.4/32:3180AcceptDefaultfrom anyto anyDeny* Filter InternalF2: 
+NoServer2Mailfrom MainSto 10.1.1.3/32:23DenyNoServer2Webfrom MainSto 10.1.1.2/32:80DenyMailfrom anyto 10.1.1.3/32:23AcceptWebfrom anyto 10.1.1.2/32:80AcceptNoProxy2Internalfrom 10.1.1.4/32to 10.0.0.0/8DenyProxyAfrom 10.1.1.4/32to anyAcceptUsers2Mainfrom Usersto MainSAcceptUsers2Filefrom Usersto 10.1.1.5/32AcceptUsers2Proxyfrom Usersto 10.1.1.4/32:3180AcceptDefaultfrom anyto anyDeny* Assertions: 
+Users2Proxyfrom Usersto 10.1.1.4/32:3180AcceptUsers2MainSfrom Usersto MainSAcceptUsers2Mailfrom Usersto 10.1.1.2/32:80AcceptUsers2Webfrom Usersto 10.1.1.3/32:23AcceptUsers2Filefrom Usersto 10.1.1.5/32AcceptNoMailStartfrom 10.1.1.3/32to anyDenyNoWebStartfrom 10.1.1.2/32to anyDenyNoFileStartfrom 10.1.1.5/32to anyDenyNoProxyInternalfrom 10.1.1.4/32to 10.0.0.0/8DenyNoServerStartfrom MainSto anyDeny
+Figure Figure 7.11:: Profile of the proper solution of case 3
+Figure Figure 7.12:: Topology of the proper solution of case 3Conclusion 
+This master thesis presented the results of a research and work on coherence in packer filters. It also documents the design and demonstrates PFC, the Packet Filter Checker that was developed. 
+From chapter 1 to chapter 3, a research of the environment is made. Concepts on how the network operates and existing work in packet filter coherence are presented. It is shown that there is room for improvement, as the existing works on algebraic verification of isolated filters has some limitations, and there is no checker for multiple filters. 
+In chapter 4, the first contribution is made: a new algebraic checker for isolated filters. By using a more robust model based on sets and different models for rule relation and anomalies, the checker is not susceptible to the problems of false positives and negatives that could be found in previous works. The model and the design of the anomalies are based on the assumption that the order of rules is the main source of errors in a filter. So, every time the order of the rules is plain wrong (a rule is never used), trivial (inversion would result in a wrong order), or irrelevant (inversion would not change the filter), an anomaly is reported. Even though the administrator may have to add rules that do nothing to the behaviour to the filter only to clear conflicts, an anomaly-free filter is much easier to maintain: the administrator can change the order of the rules without fearing a change in the behaviour of the filter, and new rules rise anomalies indicating the rules they interfere with when placed ambiguously. 
+In chapter 5, the algebraic checker for distributed filters is presented. This checker is the main contribution of this work. By using the set algebra of the previous chapter and a model of how the filters should behave, a set of distributed anomalies was developed, and the isolated checker extended into a distributed one. Once again, we base the anomalies on a single assumption: that every possible path for each datagram inside the network must present the same behaviour. That is a reasonable assumption, as the network should not accept more types of datagrams from a point to another when a filter is too loaded or fails. As with the isolated filter design, the administrator may have to add rules in some filters to clear all anomalies, but an anomaly-free network is easier to maintain and change - any new rule that needs to be in further filters will lead to an anomaly. 
+Chapter 6 tackles functional verification of distributed filters with assertions. The idea is simple, but very useful: the verification of some properties of the resulting accessibility profile. By using assertions, the administrator can code the expected behaviour of the filter in a higher level, and let PFC check if the implementation conforms. The value of this idea demonstrated on the next chapter, the case study. 
+The case study is made of a series of iterations on one fictional company. In each iteration, the requirements of the network are changed along with its topology. Even though the security policy doesn't change, it was possible to demonstrate every anomaly. 
+The examples of the case study as well as the examples of anomalies in the previous chapters were all analysed with PFC. PFC was also used to generate the figures of the profiles and the representations of the examples. For the figures of the topologies, PFC generated an output suitable for use with Graphviz [ELLSON; GANSNER(2008)ELLSON; GANSNER]. PFC was developed using Haskell [JONES(2003)JONES], a purely functional programming language with non-strict semantics. Haskell made a difference in the development of the algebraic analyses with its strong, static polymorphic types. On the library front, Parsec [LEIJEN; MEIJER(2001)LEIJEN; MEIJER] provided an easy-to-use parser combinator and QuickCheck [CLAESSEN; HUGHES(2000)CLAESSEN; HUGHES] was used to create automatic property tests. 
+It is in the interest of the network administrator to clear its network of any anomalies, as their absence testify the consistency (conflict; disagreement, blocking, and leaking) and minimalism (invisibility, redundancy; irrelevancy) of the setup. There is one issue, though: the administrator might have to add unnecessary rules to filters only to get them anomaly-free. That can be the case when there are conflicts and disagreements, as these anomalies are report situations of ambiguity where PFC cannot determine the administrator's intention. A possible solution to this issue could be the better integration of the rule checker with the assertion checker: only report conflicts and disagreements when there is no assertion to define the desired behaviour for the analysed region, and take the target of the assertion as the correct one for the rest of the analyses. 
+Another lesser issue that might arise is the tool's reliance on the uniqueness of IP addresses. The internal representation of the model, and even the syntax of the network description file depend on it. That is an issue as it blocks the support for address translation (NAT). But as it is unusual for a company to have more than one translated network, this issue might not have an impact. 
+These issues aside, we have achieved our goal: the development and implementation of an algebraic checker for rules in single and networked filters. To our knowledge, there is no other algebraic rule checker that supports networked filter, that is a contribution to the field by itself. Other than that, our single-filter checker has two properties that are found in no other: any anomaly reported can always be eliminated by the addition or removal of rules (no persistent false positives) and the rules are analysed in their context, as there are some problems that can only be detected that way. Our tests and the case study show that the solution developed is robust and presents comprehensible information for all the anomalies, and can potentially help the network administrator setup and maintain a secure network. 
+Bibliography 
+AL-SHAER; HAMED(2002)AL-SHAER; HAMED 
+AL-SHAER, E. S.; HAMED, H. H. Design and implementation of firewall policy advisor tools. [S.l.]: DePaul University, 2002. (CTI-TR-02-006). 
+AL-SHAER; HAMED(2003)AL-SHAER; HAMED 
+AL-SHAER, E. S.; HAMED, H. H. Firewall policy advisor for anomaly detection and rule editing. In: IEEE/IFIP 8TH INT. SYMP. INTEGRATED NETWORK MANAGEMENT (IM 2003), 2003. Proceedings... [S.l.: s.n.], 2003. p.17-30. 
+AL-SHAER; HAMED(2004)AL-SHAER; HAMED 
+AL-SHAER, E. S.; HAMED, H. H. Discovery of policy anomalies in distributed firewalls. In: INFOCOM, 2004. Anais... IEEE, 2004. 
+ALMQUIST(1992)ALMQUIST 
+ALMQUIST, P. RFC 1349: type of service in the Internet Protocol suite. 1992. 
+BABOESCU; SINGH; VARGHESE(2003)BABOESCU; SINGH; VARGHESE 
+BABOESCU, F.; SINGH, S.; VARGHESE, G. Packet Classification for Core Routers: is there an alternative to CAMs? In: INFOCOM, 2003. Anais... [S.l.: s.n.], 2003. 
+BABOESCU; VARGHESE(2001)BABOESCU; VARGHESE 
+BABOESCU, F.; VARGHESE, G. Scalable packet classification. In: SIGCOMM, 2001. Anais... ACM, 2001. p.199-210. 
+BABOESCU; VARGHESE(2003)BABOESCU; VARGHESE 
+BABOESCU, F.; VARGHESE, G. Fast and scalable conflict detection for packet classifiers. J. Computer & Telecommunications Networking, [S.l.], v.42, n.6, p.717-735, aug 2003. 
+BAKER(1995)BAKER 
+BAKER, F. RFC 1812: requirements for IP version 4 routers. 1995. 
+BARTAL et al.(2004)BARTAL; MAYER; NISSIM; WOOL 
+BARTAL, Y.; MAYER, A. J.; NISSIM, K.; WOOL, A. Firmato: a novel firewall management toolkit. ACM Trans. Comput. Syst., [S.l.], v.22, n.4, p.381-420, 2004. 
+CLAESSEN; HUGHES(2000)CLAESSEN; HUGHES 
+CLAESSEN, K.; HUGHES, J. QuickCheck: a lightweight tool for random testing of haskell programs. In: ICFP, 2000. Anais... ACM, 2000. p.268-279. 
+CORMEN et al.(2001)CORMEN; LEISERSON; RIVEST; STEIN 
+CORMEN, T. H.; LEISERSON, C. E.; RIVEST, R. L.; STEIN, C. Introduction to Algorithms, Second Edition. [S.l.]: The MIT Press and McGraw-Hill Book Company, 2001. 
+DEVLIN(1993)DEVLIN 
+DEVLIN, K. The Joy of Sets: fundamentals of contemporary set theory. [S.l.]: Springer Verlag, 1993. 
+ELLSON; GANSNER(2008)ELLSON; GANSNER 
+ELLSON, J.; GANSNER, E. Graphviz. [Online; accessed 21-February-2008]. 
+EPPSTEIN; MUTHUKRISHNAN(2001)EPPSTEIN; MUTHUKRISHNAN 
+EPPSTEIN, D.; MUTHUKRISHNAN, S. Internet packet filter management and rectangle geometry. In: SODA, 2001. Anais... ACM, 2001. p.827-835. 
+FULLER et al.(1993)FULLER; LI; YU; VARADHAN 
+FULLER, V.; LI, T.; YU, J.; VARADHAN, K. RFC 1519: Classless Inter-Domain Routing (CIDR): an address assignment and aggregation strategy. 1993. 
+HARI; SURI; PARULKAR(2000)HARI; SURI; PARULKAR 
+HARI, A.; SURI, S.; PARULKAR, G. M. Detecting and Resolving Packet Filter Conflicts. In: INFOCOM, 2000. Anais... IEEE, 2000. p.1203-1212. 
+HAWKINSON; BATES(1996)HAWKINSON; BATES 
+HAWKINSON, J.; BATES, T. RFC 1930: guidelines for creation, selection, and registration of an autonomous system (AS). 1996. 
+HEMNI(2006)HEMNI 
+HEMNI, A. (Ed.). Firewall Policies and VPN Configurations. Rockland, MA: Syngress Publishing Inc., 2006. 
+JONES(2003)JONES 
+JONES, S. P. (Ed.). Haskell 98 Language and Libraries - The Revised Report. Cambridge, England: Cambridge University Press, 2003. 
+KNUTH(1997)KNUTH 
+KNUTH, D. The Art of Computer Programming, Volume 1: fundamental algorithms. third.ed. [S.l.]: Addison-Wesley, 1997. v.1. 
+KNUTH(1998)KNUTH 
+KNUTH, D. The Art of Computer Programming, Volume 3: sorting and searching. second.ed. [S.l.]: Addison-Wesley, 1998. v.3. 
+LAKSHMAN; STILIADIS(1998)LAKSHMAN; STILIADIS 
+LAKSHMAN, T. V.; STILIADIS, D. High-Speed Policy-Based Packet Forwarding Using Efficient Multi-Dimensional Range Matching. In: SIGCOMM, 1998. Anais... ACM, 1998. p.203-214. 
+LEIJEN; MEIJER(2001)LEIJEN; MEIJER 
+LEIJEN, D.; MEIJER, E. Parsec: direct style monadic parser combinators for the real world. 2001. 
+MALKIN(1993)MALKIN 
+MALKIN, G. RFC 1388: RIP version 2 carrying additional information. 1993. 
+MAYER; WOOL; ZISKIND(2000)MAYER; WOOL; ZISKIND 
+MAYER, A. J.; WOOL, A.; ZISKIND, E. Fang: a firewall analysis engine. In: IEEE SYMPOSIUM ON SECURITY AND PRIVACY, 2000. Anais... [S.l.: s.n.], 2000. p.177-187. 
+MAYER; WOOL; ZISKIND(2006)MAYER; WOOL; ZISKIND 
+MAYER, A. J.; WOOL, A.; ZISKIND, E. Offline firewall analysis. Int. J. Inf. Sec., [S.l.], v.5, n.3, p.125-144, jul 2006. 
+MOY(1998)MOY 
+MOY, J. RFC 2328: OSPF version 2. 1998. 
+NICHOLS et al.(1998)NICHOLS; BLAKE; BAKER; BLACK 
+NICHOLS, K.; BLAKE, S.; BAKER, F.; BLACK, D. RFC 2474: definition of the Differentiated Services field (DS field) in the IPv4 and IPv6 headers. 1998. 
+POSTEL(1980)POSTEL 
+POSTEL, J. RFC 768: User Datagram Protocol. 1980. 
+POSTEL(1981a)POSTEL 
+POSTEL, J. RFC 791: Internet Protocol. 1981. 
+POSTEL(1981b)POSTEL 
+POSTEL, J. RFC 792: Internet Control Message Protocol. 1981. 
+POSTEL(1981c)POSTEL 
+POSTEL, J. RFC 793: Transmission Control Protocol. 1981. 
+RAMAKRISHNAN; FLOYD; BLACK(2001)RAMAKRISHNAN; FLOYD; BLACK 
+RAMAKRISHNAN, K.; FLOYD, S.; BLACK, D. RFC 3168: the addition of Explicit Congestion Notification (ECN) to IP. 2001. 
+REKHTER; LI(1993)REKHTER; LI 
+REKHTER, Y.; LI, T. RFC 1518: an architecture for IP address allocation with CIDR. 1993. 
+SRINIVASAN et al.(1998)SRINIVASAN; VARGHESE; SURI; WALDVOGEL 
+SRINIVASAN, V.; VARGHESE, G.; SURI, S.; WALDVOGEL, M. Fast and Scalable Layer Four Switching. In: SIGCOMM, 1998. Anais... ACM, 1998. p.191-202. 
+SU(2000)SU 
+SU, C.-F. High-speed packet classification using segment tree. In: IEEE GLOBAL TELECOMMUNICATIONS CONFERENCE, 2000. Proceedings... [S.l.: s.n.], 2000. v.21, p.560-571. 
+TAYLOR(2005)TAYLOR 
+TAYLOR, D. E. Survey and taxonomy of packet classification techniques. ACM Comput. Surv., [S.l.], v.37, n.3, p.238-275, 2005. 
+VASKOVICH(2008)VASKOVICH 
+VASKOVICH, F. Nmap Network Scanning. [Online; accessed 28-June-2008]. 
+WELTE; AYUSO(2007)WELTE; AYUSO 
+WELTE, H.; AYUSO, P. N. netfilter/iptables project homepage. [Online; accessed 20-February-2008]. 
+WOO(2000)WOO 
+WOO, T. Y. C. A Modular Approach to Packet Classification: algorithms and results. In: INFOCOM (3), 2000. Anais... [S.l.: s.n.], 2000. p.1213-1222. 
+ZIMMERMANN(1980)ZIMMERMANN 
+ZIMMERMANN, H. OSI Reference Modell - The ISO Model of Architecture for Open Systems Interconnection. IEEE Transactions on communication, [S.l.], v.28, p.425-432, Apr. 1980. 
+ZWICKY; COOPER; CHAPMAN(2000)ZWICKY; COOPER; CHAPMAN 
+ZWICKY, E. D.; COOPER, S.; CHAPMAN, B. D. Building Internet Firewalls. 2.ed. [S.l.]: O'Reilly Associates, 2000. 
+
+Index 
+accessibility 
+correct accessibility profile 
+5 
+accessibility profile 
+5 | 5 
+Anomalies 
+2 | 2 
+anomaly 
+conflict 
+2 
+invisibility 
+1 
+redundancy 
+3 
+assertion 
+contradiction 
+4 
+violation 
+4 
+assertions errors 
+4 | 4 
+bit vector 
+1 | 1 
+Classless Inter-Domain Routing 
+1 | 1 
+conflict 
+2 
+algorithm 
+3 
+definition 
+2 
+consistency 
+3 
+contradiction 
+4 
+correct accessibility profile 
+5 
+correlated 
+3 
+Destination Address 
+1 
+destination port 
+2 | 2 
+difference 
+3 
+disjoints 
+3 
+equal 
+3 
+equivalent filter 
+4 | 4 
+Fang 
+2 | 2 
+filter typesstateful filters 
+3 
+filter typesStateless filters 
+3 
+Filters 
+3 
+Firewall Analiser 
+2 | 2 
+Firewall Policy Advisor 
+1 | 1 
+FPA 
+1 
+half open port scan 
+3 | 3 
+inner 
+3 
+Internet Control Message Protocol 
+2 | 2 
+intersection 
+3 
+invisibility 
+1 
+algorithm 
+2 
+definition 
+1 
+IP 
+1 
+IP adress 
+1 | 1 
+IP header 
+Destination Address 
+1 
+Protocol 
+1 
+Source Address 
+1 
+irrelevant 
+5 
+isolated 
+consistency 
+3 
+minimalism 
+3 
+match 
+1 | 1 | 3 | 3 
+minimalism 
+3 
+modulus 
+3 
+network 
+3 
+inner 
+3 
+terminal 
+3 
+network mask 
+1 | 1 
+network prefix 
+1 | 1 
+packet filter 
+4 | 4 
+Protocol 
+1 
+ranges 
+operations
+difference 
+3 
+intersection 
+3 
+union 
+3 
+properties
+modulus 
+3 
+relations
+correlated 
+3 
+disjoints 
+3 
+equal 
+3 
+subset 
+3 
+superset 
+3 
+redundancy 
+3 
+algorithm 
+4 
+definition 
+3 
+region 
+3 | 3 
+regionset 
+3 | 3 
+router 
+3 
+plain 
+3 
+Routers 
+1 | 1 
+routing 
+1 | 1 
+rule 
+3 | 3 
+rule order 
+irrelevant 
+5 
+trivial 
+5 
+Source Address 
+1 
+Source port 
+2 | 2 
+stateful filters 
+3 
+Stateless filters 
+3 
+subset 
+1 | 1 | 3 
+superset 
+3 
+target 
+2 | 2 
+terminal 
+3 
+Transmission Control Protocol 
+3 | 3 
+tree of rules 
+1 | 1 
+trie 
+1 | 1 
+trivial 
+5 
+union 
+3 
+User Datagram Protocol 
+2 | 2 
+violation 
+4 
+About this document ... 
+Coherence in distributed packet filters
+This document was generated using the LaTeX2HTML translator Version 2008 (1.71) 
+Copyright © 1993, 1994, 1995, 1996, Nikos Drakos, Computer Based Learning Unit, University of Leeds. 
+Copyright © 1997, 1998, 1999, Ross Moore, Mathematics Department, Macquarie University, Sydney. 
+The command line arguments were: 
+latex2html -show_section_numbers -split 0 diss.tex 
+The translation was initiated by Leandro Lisboa Penz on 2009-10-06
+
+Footnotes
+... filter
+A more correct term would be datagram filter, as the device acts also on IP and UDP datagrams and not only on TCP packets. 
+
+
+Leandro Lisboa Penz 2009-10-06 

@@ -1,0 +1,24 @@
+digraph {
+	rankdir=LR
+	edge [ dir="none" ]
+	bnet10 [ label="10.0.0.0/24" ]
+	bnet11 [ label="10.0.1.0/24" ]
+	bnet12 [ label="10.0.2.0/24" ]
+	bnet20 [ label="10.1.0.0/24" ]
+	bnet21 [ label="10.1.1.0/24" ]
+	bnet22 [ label="10.1.2.0/24" ]
+	bnetR  [ label="196.168.0.0/24" ]
+	bnet10 -> bnet11 [ label="Router 1" constraint="false" ]
+	bnet10 -> bnet12 [ label="Router 1" ]
+	bnet11 -> bnet12 [ label="Router 1" ]
+	bnet10 -> bnetR [ label="Router 1" ]
+	bnet11 -> bnetR [ label="Router 1" ]
+	bnet12 -> bnetR [ label="Router 1" ]
+	bnet21 -> bnet20 [ label="Router 2" constraint="false" ]
+	bnet22 -> bnet20 [ label="Router 2" ]
+	bnet22 -> bnet21 [ label="Router 2" ]
+	bnetR -> bnet20  [ label="Router 2" ]
+	bnetR -> bnet21  [ label="Router 2" ]
+	bnetR -> bnet22  [ label="Router 2" ]
+}
+

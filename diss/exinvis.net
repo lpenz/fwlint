@@ -1,0 +1,11 @@
+alias All       0.0.0.0/0
+
+[ {
+    filter F,
+    [ {10.0.0.1/24}, {10.1.0.1/24}, ],
+    [
+	{ rule Default   , src All         , dst All , Deny   },
+	{ rule Invisible , src 10.0.0.0/24 , dst All , Accept },
+	]
+} ]
+

@@ -1,0 +1,20 @@
+digraph {
+	rankdir=LR
+	edge [ dir="none" ]
+	anet10 [ label="10.0.0.0/24" ]
+	anet11 [ label="10.0.1.0/24" ]
+	anet12 [ label="10.0.2.0/24" ]
+	anet20 [ label="10.1.0.0/24" ]
+	anet21 [ label="10.1.1.0/24" ]
+	anet22 [ label="10.1.2.0/24" ]
+	arouter1 [ label="Router 1" ]
+	arouter2 [ label="Router 2" ]
+	anet10 -> arouter1
+	anet11 -> arouter1
+	anet12 -> arouter1
+	arouter1 -> arouter2 [ label="192.168.0.0/24" ]
+	arouter2 -> anet20
+	arouter2 -> anet21
+	arouter2 -> anet22
+}
+

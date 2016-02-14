@@ -1,0 +1,48 @@
+
+\usepackage{a4wide}
+\usepackage[T1]{fontenc}
+\usepackage[latin1]{inputenc}
+\usepackage{verbatim}
+\usepackage{graphicx}
+\usepackage{url}
+\usepackage{times}
+\usepackage{algorithmicx}
+\usepackage[ruled]{algorithm}
+\usepackage{algpseudocode}
+\algsetlanguage{pseudocode}
+\usepackage{amsmath}
+\usepackage{amsthm}
+\usepackage{amsfonts}
+\usepackage{makeidx}
+\usepackage[usenames,dvipsnames]{color}
+\makeindex
+
+\providecommand{\defpar}[2][]{{\bf #2}\index{#1#2}\index{#2}}
+\newcommand{\ip}[1]{#1}
+\newcommand{\imagefit}[1]{\centering\includegraphics[width=.9\columnwidth,height=.8\textheight,keepaspectratio]{#1}}
+\newcommand{\imagenorm}[1]{\centering\includegraphics[keepaspectratio]{#1}}
+\newcommand{\imagescale}[2]{\centering\includegraphics[width=#1\columnwidth,height=#1\textheight,keepaspectratio]{#2}}
+\newcommand{\imagescaleD}[3]{\begin{center}\includegraphics[width=.2\columnwidth,height=.2\textheight,keepaspectratio]{#2} \includegraphics[width=.2\columnwidth,height=.2\textheight,keepaspectratio]{#3} \end{center} }
+\newcommand{\imagescaleQ}[5]{\begin{center}\includegraphics[width=.2\columnwidth,height=.2\textheight,keepaspectratio]{#2} \includegraphics[width=.2\columnwidth,height=.2\textheight,keepaspectratio]{#3} \includegraphics[width=.2\columnwidth,height=.2\textheight,keepaspectratio]{#4}  \includegraphics[width=.2\columnwidth,height=.2\textheight,keepaspectratio]{#5} \end{center} }
+
+\newcommand{\RFC}[1]{RFC#1}
+
+\newcommand{\Calll}[2]{\textproc{#1}(#2)}
+\newcommand{\True}{\textproc{True}}
+\newcommand{\False}{\textproc{False}}
+\newcommand{\ForAllIn}[2]{\ForAll{#1 {\bf in} #2}}
+
+\newtheorem{mathstatementinternal}{Statement}[section]
+\newenvironment{mathstatement}[0]{\vspace{.5em}\begin{mathstatementinternal}}{\end{mathstatementinternal}}
+
+\newcommand{\KeywordsShow}[1]{
+\par\vfill
+\noindent\textbf{\keywordsname:} #1
+}
+
+%\newtheorem{cor}[theorem]{Corolário}
+%\newtheorem{prop}{Proposição}
+%\newtheorem{lem}[theorem]{Lema}
+
+% vim: ft=tex
+

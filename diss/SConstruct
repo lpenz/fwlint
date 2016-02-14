@@ -1,0 +1,86 @@
+
+execfile('/home/lpenz/projs/sconstools/utils.py')
+
+env = Env()
+#env.SConscript('../fwc/SConscript')
+
+import subprocess
+
+revno = subprocess.Popen(["/bin/sh", "-c", "darcs changes | grep -c '^  \*'"], stdout=subprocess.PIPE).communicate()[0]
+revno = revno[0:-1]
+env.Command('revno.tex', [], 'echo '+revno+' > $TARGET')
+
+products = [ 'diss', 'isoladosArtigo', 'distribuidosArtigo', 'casestudyArtigo' ]
+for i in products:
+    env.LATEXER(i + '.tex')
+
+def pspdf(name):
+    env.Command(name+'.pdf', name+'.ps', 'epstopdf $SOURCE')
+    env.Depends('diss.pdf', name + '.pdf')
+
+def dotit(name):
+    env.DOT(name+'.pdf', name+'.dot')
+
+def neatoit(name):
+    env.DOT(name+'.pdf', name+'.neato')
+
+dotit('tcpConnect')
+dotit('trie1')
+dotit('bv')
+dotit('faixasRelacoes')
+dotit('piorcaso4')
+dotit('mediocaso4')
+dotit('networkExample1')
+dotit('networkExample1Graph1')
+dotit('networkExample1Graph2')
+dotit('distributedAnomalyHierarchy')
+
+def netneato2netdot(name):
+    env.Command(name + '_dot.dot', name + '.neato',
+        "sed -e 's/graph/digraph/' -e 's/overlap=false/rankdir=BT; edge [dir=none]/' -e 's/ -- / -> /' $SOURCE > $TARGET")
+
+def useCommand(command, name, src, dst):
+    env.Command(name+dst, name+src, command+' < $SOURCE > $TARGET')
+    env.Depends(name+dst, command)
+
+def doallCommand(command, src, dst):
+    for name in glob.glob('*'+src):
+        name = name.replace(src, '', 1)
+        useCommand(command, name, src, dst)
+
+doallCommand('../fwc/fw_anomisol', 'fw', 'res')
+
+def net2neato(name):
+    useCommand('../fwc/net_neato', name, '.net', '.neato')
+    neatoit(name)
+
+for name in glob.glob('*.net'):
+    name = name.replace('.net', '', 1)
+    net2neato(name)
+    svg2pdf(name+'_profile.pdf', name+'_profile.svg')
+    netneato2netdot(name)
+    dotit(name+'_dot')
+    dotit(name+'_ruletree')
+
+env['HASKELLPATH']=['../hplib']
+env.HASKELL('svgrules.hs')
+
+for name in glob.glob('exr_*.exrules'):
+    name = name.replace('.exrules', '', 1)
+    env.Command(name+'.svg', name+'.exrules', './svgrules < $SOURCE > $TARGET')
+    env.Depends(name+'.svg', './svgrules')
+    svg2pdf(name+'.pdf', name+'.svg')
+
+for basename in ['conjuntos']:
+    svg2png(basename+'.png', basename+'.svg')
+    noalpha(basename+'Noalpha.png', basename+'.png')
+    png2pdf(basename+'Noalpha.pdf', basename+'Noalpha.png')
+
+doallCommand('../fwc/net_tex', '.net', '.tex')
+doallCommand('../fwc/net_checker', '.net', '.res')
+doallCommand('./grepaliases', '.net', '_aliases.tex')
+doallCommand('../fwc/net_globalprofile_svg', '.net', '_profile.svg')
+doallCommand('../fwc/net_ruletree_dot', '.net', '_ruletree.dot')
+env.Command('ppgcvista.pdf', 'ppgcvista.pdf.gz', 'gunzip -c $SOURCE > $TARGET')
+env.Depends('diss.pdf', 'ppgcvista.pdf')
+

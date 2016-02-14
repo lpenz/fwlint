@@ -1,0 +1,19 @@
+digraph {
+	edge [ constraint="true" style="invis" ]
+	subgraph clusterCliente {
+		label="Client"
+		node [ label="" style=invis ]
+		c1 -> c2 -> c3 -> c4
+	}
+	subgraph clusterServidor {
+		label="Server"
+		node [ label="" style=invis]
+		s1 -> s2 -> s3 -> s4
+	}
+	edge [ constraint="false" style="solid" minlen="4" ]
+	c1 -> s1 [ label="SYN=1, ACK=0" ]
+	s2 -> c2 [ label="SYN=1, ACK=1" ]
+	c3 -> s3 [ label="SYN=0, ACK=1" ]
+	s4 -> c4 [ dir="both" label="SYN=0, ACK=1\ndata" ]
+}
+

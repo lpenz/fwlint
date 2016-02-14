@@ -1,0 +1,1025 @@
+
+\section{Introduction}
+
+After studying the existing packet filter\footnote{A more correct term would be
+\emph{datagram filter}, as the device acts also on IP and UDP datagrams
+and not only on TCP packets.}
+and coherence checkers, we can say
+that there is still room for improvement. In this chapter, a new checker for
+isolated packet filters is developed, along with a new set of anomalies. The
+goal is to improve on Al-Shaer and Hamed's approach, providing a more robust checker
+that deals with the rule set as a whole.
+
+We begin by gathering the requirements and desirable features of the checker.
+The second step is to model datagrams, rules and filters. The model is based on
+sets, as that provides a familiar and flexible semantics for the whole system.
+The definition of what characterizes an anomaly follows. An anomaly is supposed
+to be anything ``suspicious'' in the filter, and that will be formally defined.
+As a last step, this chapter shows the algorithms and other artifacts involved.
+
+
+
+\section{Requirements}
+
+The system for the analysis of distributed filters that will be shown in a later
+chapter is an extension of the one shown in this chapter.
+
+The analysis based on pairs of rules is to be avoided,
+as it limits the view of anomalies by not considering the
+effects of the rules combined. It also leads to a combinatory explosion if
+more than one filter is analysed.
+
+The filter checker takes only the rules of the filter as input.  Its output are
+the anomalies found, showing the rules involved and other available information.
+
+The checker must present a complete report, and require no further analysis by the
+network administrator (in opposition to \cite{MayWooZis-Fang-00}). It must be
+possible to eliminate false positives by the addition of rules (as in
+\cite{Hari-Detecting-00}, in opposition to \cite{AlSHam-Fpa-03}). It must
+consider at least five fields (protocol, source and destination addresses and
+ports) instead of two (as it is in
+\cite{Eppstein-Rectangle-01,Su-SegmentTree-00}), and should be extensible to
+more fields.
+
+Anomalies should report probable mistakes by the system administrator. According
+to Al-Shaer and Hamed \cite{AlSHam-Fpa-03}, most mistakes come from the wrong positioning of rules
+in the filter. So, the most suspicious property of a rule is its position,
+its implicit priority. Every time the position of a rule is
+neither irrelevant nor trivial, an anomaly must be reported.
+
+Anomalies must also be reported when there are rules that have no effect
+on the filter, i.e. a rule could be removed and the behaviour of the filter
+would not change. That means that the rule is either superseded by another or
+that its target is wrong and the behaviour of the filter is not the one
+expected.
+
+Other than that, rules are taken to be right, and it is not possible to report
+further probable errors with only the rules as input.
+
+
+
+\section{Model for datagrams, fields and rules}
+
+The model developed is based on sets, with a representation through ranges.
+
+The fields of an IP datagram to be considered are: the source and destination
+addresses, the source and destination ports and the protocol. Every datagram is
+then represented as a 5-tuple, with a numeric value for each field. For the
+effects of analysis, every packed is uniquely and completely represented by the
+combination of these fields:
+\begin{equation*}
+	datagram =
+	\begin{cases}
+		protocol & \in Protocols \\
+		source_{address} & \in Addresses \\
+		source_{port} & \in Ports \\
+		destination_{address} & \in Addresses \\
+		destination_{port} & \in Ports
+	\end{cases}
+\end{equation*}
+
+The Cartesian product of these fields forms the datagram space:
+\begin{equation*}
+	Datagram = Protocol \times Addresses \times Ports \times Addresses \times Ports
+\end{equation*}
+
+Each field domain is isomorphic to a contiguous subset of the natural numbers.
+Protocols are in the range $[0-2]$, each number representing one of ICMP, UDP or
+TCP. Ports are in the range $[0-65536]$.
+
+A \defpar{region} is a subset of the datagram space that can be represented by a
+single range for each field. Each range is represented by its start and end
+values:
+\begin{equation*}
+	region =
+	\begin{cases}
+		protocol~start & \in Protocols \\
+		protocol~end & \in Protocols \\
+		source_{address}~start & \in Addresses \\
+		source_{address}~end & \in Addresses \\
+		source_{port}~start & \in Ports \\
+		source_{port}~end & \in Ports \\
+		destination_{address}~start & \in Addresses \\
+		destination_{address}~end & \in Addresses \\
+		destination_{port}~start & \in Ports \\
+		destination_{port}~end & \in Ports
+	\end{cases}
+\end{equation*}
+
+As the ranges have the semantics of a set, the concepts of relations, operations
+and properties already present in set theory \cite{devlin:jos} are readily available:
+
+\begin{itemize}
+	\item Relations, given two ranges $X$ and $Y$:
+		\begin{itemize}
+			\item $\forall x \in X, \forall y \in Y: x \in Y, y \in X \Rightarrow X = Y$,
+				two ranges are \defpar[ranges!relations!]{equal} if their elements are the same.
+			\item $\forall x \in X, \exists y \in Y: x \in Y, y \notin X \Rightarrow X \subset Y, Y \supset X$, 
+				a range is a \defpar[ranges!relations!]{superset} of another if it has all the
+				elements of the other and at least one more. The latter is
+				said to be a \defpar[ranges!relations!]{subset} of the former.
+			\item $\forall x \in X: \exists x \in Y, X \not\subset Y, X \not\supset Y, X \neq Y \Rightarrow X \triangle Y$,
+				if two sets have some elements in common and both have some
+				unique elements in respect to the other, they are
+				\defpar[ranges!relations!]{correlated}.
+			\item $\forall x \in X, \forall y \in Y: \lnot\exists x \in Y, \lnot\exists y \in X \Rightarrow X \bowtie Y$,
+				if two sets have no elements in common, they are
+				\defpar[ranges!relations!]{disjoints}.
+		\end{itemize}
+		These relations are sufficient and necessary to describe every possible
+		relation between two ranges.
+
+		Proof: the relation between a value and an arbitrary range can be only
+		$\in$ or $\not\in$. If elements $x \not\in Y$ are considered as being or
+		not in $X$, elements $y \not\in X$ considered as being or not in $Y$,
+		and elements $e$ that can be both in $X$ and in $Y$, every possible
+		relation can be mapped and seen in table \ref{tab:faixasRelacoes}.
+		Figure \ref{fig:conjuntos} shows all relations, while figure
+		\ref{fig:faixasRelacoes} shows all possible transitions.
+
+	\item binary operations:
+		\begin{itemize}
+			\item \defpar[ranges!operations!]{intersection}, $\cap$: from two ranges,
+				creates a third that has only the elements that are in both
+				ranges. This operation is not defined for disjoint ranges.
+			\item \defpar[ranges!operations!]{union}, $\cup$: given two ranges, returns a
+				\emph{set of ranges} that has all elements present in them.
+				The operation prevents repetition of elements in the
+				ranges returned.
+			\item \defpar[ranges!operations!]{difference}, $-$: given two ranges, it
+				creates the \emph{set of ranges} that has all the elements in
+				the first range that are not present in the second range.
+		\end{itemize}
+		The number of elements of the set of ranges generated by the operations
+		of union and difference can be seen in table
+		\ref{tab:faixasModuloOperacoes}. Example of range operations are shown
+		in table \ref{tab:rangeopexample}.
+	\item properties: every range has a
+		\defpar[ranges!properties!]{modulus} ($|R|$) that is equal to the number of
+		elements in it.
+\end{itemize}
+
+Ranges are represented as closed intervals containing the extremes, therefore it
+is not possible to represent a range with no elements. Operations that would
+return an empty range raise an error instead.
+
+
+\begin{figure}
+	\imagefit{conjuntosNoalpha.pdf}
+	\caption{\label{fig:conjuntos}All possible set relations.}
+\end{figure}
+
+\begin{table}
+	\centering
+	\caption{\label{tab:faixasRelacoes} Table of every possible relation between
+	two ranges.}
+	\begin{tabular}{l|ccc}
+		&             $X=\{X\}$ & $X=\{X,e\}$     & $X=\{e\}$ \\
+		\hline
+		$Y=\{Y\}$   & $\bowtie$ & $\bowtie$       & $\bowtie$ \\
+		$Y=\{Y,e\}$ & $\bowtie$ & $\triangle$     & $\subset$ \\
+		$Y=\{e\}$   & $\bowtie$ & $\supset$       & $=$ \\
+	\end{tabular}
+\end{table}
+
+\begin{figure}
+	\imagefit{faixasRelacoes.pdf}
+	\caption{\label{fig:faixasRelacoes}Every relation transition possible
+	between $X$ and $Y$. The direction of an edge can be inverted by inverting
+	the operation.}
+\end{figure}
+
+\begin{table}
+	\centering
+	\caption{\label{tab:faixasModuloOperacoes}Number of elements of the result
+	of an operation by relation of operands for ranges.}
+	\begin{tabular}{cccc}
+		&   Relation                           & max $|\cup|$ & max $|-|$ \\
+		\hline
+		A & $=$                                & 1            & 0 \\
+		B & $\subset$                          & 1            & 0 \\
+		C & $\supset$ with a common extreme    & 1            & 1 \\
+		D & $\supset$ with different extremes  & 1            & 2 \\
+		E & $\triangle$                        & 1            & 1 \\
+		F & $\bowtie$                          & 2            & 1 \\
+	\end{tabular}
+\end{table}
+
+\begin{table}
+	\centering
+	\caption{\label{tab:rangeopexample}Example of range operations.}
+	\begin{tabular}{lllll}
+		& Example              & $\cap$      & $\cup$              & $-$ \\
+		\hline
+		A & $[1-10]$, $[1-10]$ & $[1-10]$    & $\{[1-10]\}$        & $\emptyset$ \\
+		B & $[3-7]$, $[1-10]$  & $[3-7]$     & $\{[1-10]\}$        & $\emptyset$ \\
+		C & $[1-10]$, $[4-10]$ & $[4-10]$    & $\{[1-10]\}$        & $\{[1-3]\}$ \\
+		D & $[1-10]$, $[4-7]$  & $[4-7]$     & $\{[1-10]\}$        & $\{[1-3],[8-10]\}$ \\
+		E & $[1-7]$, $[5-10]$  & $[5-7]$     & $\{[1-10]\}$        & $\{[1-4]\}$ \\
+		F & $[1-4]$, $[7-10]$  & N/A         & $\{[1-4], [7-10]\}$ & $\{[1-4]\}$ \\
+	\end{tabular}
+\end{table}
+
+Regions are used to represent a restricted set of datagrams. A
+\defpar{regionset} is a set of regions, and is used to represent an arbitrary
+subset of datagrams.
+\begin{equation*}
+	regionset \subset Datagramas
+\end{equation*}
+\begin{equation*}
+	regionset =
+	\begin{cases}
+		region_1 & \in Regions \\
+		region_2 & \in Regions \\
+		region_3 & \in Regions \\
+		...
+	\end{cases}
+\end{equation*}
+
+As regions have the same semantics of sets, the relations, operations and
+properties that were discussed for ranges also apply. Operations that map to a
+set of ranges here map to a regionset, with the number of elements according to
+table \ref{tab:regioesModuloOperacoes}.
+
+\begin{table}
+	\centering
+	\caption{\label{tab:regioesModuloOperacoes}Relations and the maximum number
+	of elements of the operations that create regionsets, in terms of the
+	number $n$ of fields.}
+	\begin{tabular}{ccc}
+		Relation     & max $|\cup|$ & max $|-|$ \\
+		\hline
+		$=$          & 1        & 0 \\
+		$\subset$    & 1        & 0 \\
+		$\supset$    & 1        & $2n$ \\
+		$\triangle$  & $2n+1$   & 1 \\
+		$\bowtie$    & 2        & 1 \\
+	\end{tabular}
+\end{table}
+
+The next entity that needs definition is the \defpar{rule}. A rule maps a
+region to an action, that can be either \emph{accept} to let the datagrams pass,
+or \emph{deny} to drop them. The region of a rule is called the \defpar{match}
+of the rule.
+\begin{equation*}
+	rule =
+	\begin{cases}
+		match & \in Regionsets \\
+		action & \in \{ \mbox{accept}, \mbox{deny} \}
+	\end{cases}
+\end{equation*}
+
+A filter, for the isolated checker, is a set of rules that define actions to
+every datagram in the domain:
+\begin{equation*}
+	filter =
+	\begin{cases}
+		function : Datagrams \rightarrow \{ \mbox{accept}, \mbox{deny} \}
+	\end{cases}
+\end{equation*}
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+\subsection{Features of the model}
+
+The model based on sets has the following positive features:
+
+\begin{description}
+	\item[expressive] {
+		As commented in \ref{sec:match}, ranges are the most expressive
+		representation for a field (others are exact match and prefix). The only
+		restrictions imposed is that the values of the field must have total
+		order and be bounded.
+
+		And by having the semantic of sets, the power of the relations and
+		operations of set theory is readily available.
+		}
+	\item[compact] {
+		The representation of rules with regions keeps compactness in the
+		presence of the set semantics. Every rule can be represented as a single
+		region, even though the algorithms may use operations that multiply the
+		number of regions present in memory.
+		}
+	\item[extensible]{
+		\label{extensible}
+		Although this work has a well-defined and limited the number of fields, the
+		semantics and $n$-tuple behavior allows this number to be
+		easily increased, without adding any special support.
+		}
+\end{description}
+
+\begin{table}
+	\centering
+	\caption{Example of a filter and its equivalents.}
+	\begin{tabular}{l|l}
+		Region                     & Equivalent filter \\
+		\hline
+		Universe                   & \tt{src = 10.0.1.0/24, ACCEPT} \\
+		                           & \tt{src = 10.0.2.0/24, ACCEPT} \\
+		                           & \tt{src = 0.0.0.0/0, DENY} \\
+		\hline
+		\tt{src} $\in 10.0.1.0/24$ & \tt{src = 10.0.1.0/24, ACCEPT} \\
+		                           & \tt{src = 0.0.0.0/0, DENY} \\
+		\hline
+		\tt{src} $\in 10.0.2.0/24$ & \tt{src = 10.0.2.0/24, ACCEPT} \\
+		                           & \tt{src = 0.0.0.0/0, DENY} \\
+		\hline
+		Other                      & \tt{src = 0.0.0.0/0, DENY} \\ 
+	\end{tabular}
+\end{table}
+
+
+\section{Equivalent filters}
+
+When a subset of the universe of datagrams is considered, it is possible to
+eliminate the rules that do not apply to any datagram in the subset.
+The \defpar{equivalent filter} has exactly the same behaviour of the
+original filter for that subset.
+
+By using equivalent filters, it is possible to analyse the rules of a filter in
+the context of their interaction. That makes it feasible to increase the number
+of rules being considered and to define anomalies in a broader view when compared
+to pair analysis.
+
+The order of the rules in an equivalent filter is the same found in the original
+filter. So, the rule that defines the target for a datagram in the subset considered
+is the first rule of the equivalent filter that matches the datagram.
+
+
+
+\section{Anomalies}
+
+An anomaly is an evidence that the properties of consistency and minimalism do
+not hold. Both properties are highly desirable in packet filters, as the first
+prevents some kinds of mistakes and the second potentially improves filter
+performance. These properties guide the development of the specific anomalies.
+
+In a single filter, each anomaly represents a rule with no effect or a case where the order of the rules
+is neither \emph{irrelevant} nor \emph{trivial}.
+
+The order of two rules is \defpar[rule order!]{irrelevant} if
+they are disjoint. The analysis based on equivalent filters avoids this case, as
+disjoint rules will never appear together in an equivalent filter.
+
+On the other hand, the order of two rules is only
+\defpar[rule order!]{trivial} if the region of one rule is a subset of
+the region of the other. Every other relation makes the ordering ambiguous. If the
+order of two rules is trivial and they exchange places, an anomaly is reported
+(invisibility),
+as one of the rules has no effect.
+
+\begin{table}
+	\centering
+	\caption{\label{tab:anomaliaPotencial} $R$ (greater priority) and $S$
+	potential anomalies as a function of their relation.}
+	\begin{tabular}{ccc}
+		Relation        & Targets    & Potential anomaly \\
+		\hline
+		$R = S$         & any        & Invisibility \\
+		$R \subset S$   & same       & Redundancy \\
+		$R \subset S$   & different  & - \\
+		$R \supset S$   & any        & Invisibility \\
+		$R \triangle S$ & same       & - \\
+		$R \triangle S$ & different  & Conflict \\
+		$R \bowtie S$   & any        & - \\
+	\end{tabular}
+\end{table}
+
+This leads to three possible combination of rules (table
+\ref{tab:anomaliaPotencial}):
+\begin{itemize}
+	\item A rule that is a subset of another and has less priority: anomaly, the
+		first rule can be removed or is in the wrong position;
+	\item Two rules are correlated: if their targets are the same, no anomaly.
+		If their targets are different, then their intersecting region must have a rule contained in both of
+		them that defines the target and has a trivial order in respect to
+		the previous rules. Otherwise, there is a conflict in the
+		region, as any priority change will lead to a change in the target, and the
+		priority is not trivial.
+	\item A rule that is a subset of another, has greater priority and same
+		target: anomaly, as the removal of this rule won't change the target for
+		any datagram.
+\end{itemize}
+
+
+\subsection{Invisibility}
+
+\index{invisibility!definition}
+
+The first anomaly, \defpar[anomaly!]{invisibility}, shows the rules that do
+not define the target for any datagram because of their priority. For all
+datagrams that these rules select, there is a rule with greater priority that already
+defined the datagram's target. The invisible rules are either out-of-place or
+completely unnecessary.
+
+Invisible rules are not considered for the analysis of further anomalies, and so
+this anomaly must be the first one to be checked.
+
+Figure \ref{fig:exrinvisible} shows four diagrams with invisible rules.
+Each diagram represents a filter with only one field where each square
+represents a single field value, and each line represents a rule. The red rules
+have the deny target, and the green ones have the accept target. The rules with
+the highest priority are on top.
+
+\begin{figure}
+	\imagescaleQ{.2}{exr_invisible1.pdf}{exr_invisible2.pdf}{exr_invisible3.pdf}{exr_invisible4.pdf}
+	\caption{\label{fig:exrinvisible}Invisible rules are not used.}
+\end{figure}
+
+Formally:
+\begin{align*}
+	& \exists ~ rule_1 \in Filter \\
+	& \lnot\exists ~ datagrama \in Datagramas \\
+	& rule(Filter, datagram) = rule_1 \\
+	& \qquad \Rightarrow \mbox{Invisible}(rule_1)
+\end{align*}
+
+Example:
+
+\input{exinvis.tex}
+
+PFC output (irrelevancy is another anomaly that will be presented later):
+
+\verbatiminput{exinvis.res}
+
+
+
+\subsection{Conflict}
+
+\index{conflict!definition}
+
+The \defpar[anomaly!]{conflict} arises when two rules define different targets
+for a set of datagrams and their order is not trivial. If the priority of the
+rules were exchanged, the behavior of the filter would change. The diagrams in
+figure \ref{fig:exrconflict} show two cases of conflicting rules for filters
+with a single field.
+
+Even though conflicts can happen in correct filters, they rises an anomaly, and
+require a specific rule with greater priority to define the target for the
+set of datagrams pointed (figure \ref{fig:exrconflictok}).
+
+With the third rule in place, the order of the two previous rules is irrelevant,
+and the order of the third is trivial.
+
+\begin{figure}
+	\imagescaleD{.2}{exr_conflict1.pdf}{exr_conflict2.pdf}
+	\caption{\label{fig:exrconflict}Conflicting rules have no obvious order.}
+\end{figure}
+
+\begin{figure}
+	\imagescaleD{.2}{exr_conflictok1.pdf}{exr_conflictok2.pdf}
+	\caption{\label{fig:exrconflictok}Conflicts can be fixed by adding a third
+	rule with higher priority.}
+\end{figure}
+
+Formally:
+\begin{align*}
+	& \exists ~ datagrama \in Datagramas \\
+	& \exists ~ rule_1 \in Filter \\
+	& \exists ~ rule_2 \in Filter \\
+	& datagram \in match(rule_1) \\
+	& datagram \in match(rule_2) \\
+	& action(rule_1) \not= action(rule_2) \\
+	& \lnot \exists rule_3 \in Filter \\
+	& datagram \in match(rule_3) \\
+	& match(rule_3) \subset match(rule_1) \\
+	& match(rule_3) \subset match(rule_2) \\
+	& \qquad \Rightarrow \mbox{Conflict}(rule_1, rule_2)
+\end{align*}
+
+Example:
+
+\input{exconflict.tex}
+
+PFC output:
+
+\verbatiminput{exconflict.res}
+
+Fix:
+
+\input{exconflictfixed.tex}
+
+Checker output:
+
+\verbatiminput{exconflictfixed.res}
+
+
+
+\subsection{Redundancy}
+
+\index{redundancy!definition}
+
+The \defpar[anomaly!]{redundancy} points rules that, even selecting datagrams
+because of their priority, could be safely removed without causing any change in
+the behaviour of the filter. The diagrams in figure \ref{fig:exrredundant} show
+two examples.
+
+\begin{figure}
+	\imagescaleD{.2}{exr_redundant1.pdf}{exr_redundant2.pdf}
+	\caption{\label{fig:exrredundant}Redundant rules are not needed.}
+\end{figure}
+
+The redundant rules are either not really necessary or have the wrong target.
+Changing their priority won't make rule necessary, but can make the rule
+invisible.
+
+When taken together, the absence of conflicts verifies the
+\defpar[isolated!]{consistency} of a filter, while the absence of invisibilities and
+redundancies guarantees \defpar[isolated!]{minimalism} -- that is, that all the
+rules are necessary.
+
+Formally:
+\begin{align*}
+	& \lnot\exists ~ datagrama \in Datagramas \\
+	& \exists ~ rule_1 \in Filter \\
+	& action(Filter, datagram) \not= action(Filter - rule_1, datagram) \\
+	& \qquad \Rightarrow \mbox{Redundant}(rule_1)
+\end{align*}
+
+Example:
+
+\input{exredund.tex}
+
+PFC output:
+
+\verbatiminput{exredund.res}
+
+
+
+\section{Algorithms}
+
+This section shows the algorithms for finding the set of equivalent filters and
+the anomalies. The anomalies are further detailed, as to the process that is
+necessary to find them.
+
+
+\subsection{Equivalent filter set construction}
+
+For the construction of the equivalent filters, a \defpar{tree of rules} is
+used. Every inner node of this tree stores a rule, and the edges are identified
+as ``in'' and ``out''. Every leaf holds a list of regions. An example tree with
+3 rules can be seen in figure \ref{fig:exrtree}.
+
+\begin{figure}
+	\centering
+	\imagefit{exrtree_ruletree.pdf}
+	\caption{\label{fig:exrtree}Example of a tree of rules.}
+\end{figure}
+
+The construction of the tree is incremental. The algorithm \ref{alg:ruleTree}
+details the process.
+
+After the tree is built, the equivalent filters are found by traversing the
+tree, storing the nodes where the edge taken was ``in'' and taking them only
+when the final leaf had at least one region. The details can be seen in the algorithm
+\ref{alg:filterEquivConstruct}.
+
+\begin{algorithm}
+	\caption{\label{alg:ruleTree}Tree of rules construction}
+	\begin{algorithmic}[1]
+		\Function{createTree}{$\{rules\}$}
+			\State $tree \gets leaf ($total region$)$
+			\ForAllIn{$rule$}{$rules$}
+				\State $tree \gets $ \Calll{insertRule}{$tree, rule$}
+			\EndFor
+			\State \Return $tree$
+		\EndFunction
+		\State
+		\Function{insertRule}{$node,rule$}
+			\If {$node$ is leaf}
+				\State $regions_\cap \gets node \cap rule$
+				\State $regions_- \gets node - rule$
+				\State $node \gets inner \left\{ \begin{array}{l}
+					$rule $ \gets rule \\
+					$in $ \gets leaf (regions_\cap) \\
+					$out $ \gets leaf (regions_-)
+					\end{array}\right.$
+			\Else \Comment{Node is inner}
+				\If {exists $rules \cap node$}
+					\State $node_{in} \gets $ \Calll{insertRule}{$node_{in}, rule$}
+				\EndIf
+				\If {$|node - rule| > 0$}
+					\State $node_{out} \gets $ \Calll{insertRule}{$node_{out}, rule$}
+				\EndIf
+			\EndIf
+			\State \Return $node$
+		\EndFunction
+	\end{algorithmic}
+\end{algorithm}
+
+\begin{algorithm}
+	\caption{\label{alg:filterEquivConstruct}Equivalent filter set construction}
+	\begin{algorithmic}[1]
+		\Function{buildEquivalentFilterSet}{$\{rules\}$}
+			\State $tree \gets $ \Calll{createTree}{$\{rules\}$}
+			\State \Return \Calll{buildInnerNode}{$tree$}
+		\EndFunction
+		\State
+
+		\Function{buildInnerNode}{$node$}
+			\State $filter \gets \emptyset$
+			\If {$node_{in}$ is leaf}
+		   		\If{$|node_{in}| > 0$}
+					\State $filter \gets filter \cup \{\{node_{rule}\}\}$
+				\EndIf
+			\Else\Comment{$node_{in}$ is inner}
+				\ForAllIn{$filter_{child}$}{\Calll{buildInnerNode}{$node_{in}$}}
+					\State $filter \gets filter \cup (filter_{child} + node_{rule})$
+				\EndFor
+			\EndIf
+			\If {$node_{out}$ is leaf}
+		   		\If{$|node_{out}| > 0$}
+					\State $filter \gets filter \cup \{\emptyset\}$
+				\EndIf
+			\Else\Comment{$node_{out}$ is inner}
+				\State $filter \gets filter\, \cup $ \Calll{buildInnerNode}{$node_{out}$}
+			\EndIf
+
+			\State \Return $filter$
+		\EndFunction
+	\end{algorithmic}
+\end{algorithm}
+
+
+
+\subsubsection{Complexity, worst case}
+
+To calculate the complexity in memory and space for the worst case, the first
+step is to calculate the maximum number of equivalent filters. Then, the
+necessary tree of rules for this condition can be visualised. The complexity of
+such tree is calculated based on the number of inner nodes, leaves and number of
+regions stored on the leaves. The total complexity of the construction of the
+equivalent filters can then be calculated based on that figure.
+
+The theoretical maximum number of equivalent filters generated from a filter
+with $n$ rules is the sum of every possible combination of rules.
+Mathematically:
+\begin{equation}
+	N_{equivalent\ filters} = \sum_{i=1}^{r} \left( \begin{array}{l}r \\ i\end{array} \right)
+\end{equation}
+
+Using the binomial theorem \cite{knuth1}:
+\begin{equation}
+	(x+y)^r=\sum_{i=0}^{r} \left( \begin{array}{l}r \\ i\end{array} \right) x^i y^{r-i}
+	\label{eq:bintheorem}
+\end{equation}
+
+Replacing $x = y = 1$ in \ref{eq:bintheorem} and removing the element with $i=0$
+(eliminates the empty filter), the maximum number of equivalent filters becomes:
+\begin{equation}
+	N_{equivalent\ filters} = \sum_{i=1}^{r} \left( \begin{array}{l}r \\ i\end{array} \right) - 1 = 2^r-1
+\end{equation}
+
+\begin{mathstatement}
+	The maximum number of equivalent filters for a filter with $r$ rules is 
+	$2^r-1$ in the worst case.
+\end{mathstatement}
+
+\begin{table}
+	\centering
+	\caption{\label{tab:piorcaso4}Example of worst case with 4 rules, numbered from 1 to 4.}
+	\begin{tabular}{ccl}
+		\# rules & \# eq. filters & eq. filters \\
+		\hline
+		1 & 4 & $\{1\}, \{2\}, \{3\}, \{4\}$ \\
+		2 & 6 & $\{1, 2\}, \{1, 3\}, \{1, 4\}, \{2, 3\}, \{2, 4\}, \{3, 4\}$ \\
+		3 & 4 & $\{1, 2, 3\}, \{1, 3, 4\}, \{1, 2, 4\}, \{2, 3, 4\}$ \\
+		4 & 1 & $\{1, 2, 3, 4\}$ \\
+		\hline
+		$\sum$ & 15
+	\end{tabular}
+\end{table}
+
+
+\begin{figure}
+	\centering
+	\imagefit{piorcaso4.pdf}
+	\caption{\label{fig:piorcaso4arvore}Tree of the worst case with 4 rules.}
+\end{figure}
+
+This hypothetical filter would generate a tree of rules with each rules
+appearing in and out of every previous rules. Every rule would be correlated to
+every other rule.
+
+As such, the addition of a new rule of index $i$ generates $2^i$ new nodes on the
+tree at level $i$. At every new rule, the number of nodes on the tree doubles.
+An example case with 4 rules is shown in table \ref{tab:piorcaso4}, with a
+graphical representation in figure \ref{fig:piorcaso4arvore}.
+\begin{equation}
+	\label{eq:worstCaseTreeNodes}
+	\begin{array}{l}
+	N_{inner\ nodes} = 2^r-1 \\
+	N_{leaves} = 2^r \\
+	N_{nodes} = N_{inner\ nodes} + N_{leaves} = 2^{r+1}-1 \\
+	\end{array}
+\end{equation}
+
+The number of stored regions in a leaf depends on the path taken. Every time
+an ``in'' edge is taken, an intersection is made and the number of regions is
+kept. On the other hand, every time an ``out'' edge is taken, the number of
+regions is increased, as a subtraction is performed.
+
+\begin{algorithm}
+	\caption{\label{alg:regiaosubtracao}Subtraction of two regions}
+	\begin{algorithmic}[1]
+		\Function{subtractRange}{$region1, region2$}
+			\If {$region1$ and $region2$ are disjoint}
+				\State \Return $region1$
+			\Else
+				\State $range1 \gets region1[1]$
+				\State $range2 \gets region2[1]$
+				\If {$range1 \cap range2 = range1$}
+					\State \Return $ range1 : d | d \gets $ \Calll{subtractRange}{$region1[2..], region2[2..]$}
+				\Else
+					\State $cuts \gets d : region1[2..] | d \gets $ \Calll{subtractRange}{$range1, range2$}
+					\State $intersec \gets (range1 \cap range2) : d | d \gets $ \Calll{subtractRange}{$region1[2..], region2[2..]$}
+					\State \Return $cuts \cup intersec$
+				\EndIf
+			\EndIf
+		\EndFunction
+	\end{algorithmic}
+\end{algorithm}
+
+The worst case of a subtraction (algorithm \ref{alg:regiaosubtracao}) is when
+the second region is a subset from the first, with no shared limits. In this case,
+two cuts are made, for the parts of the first range that are not intersected.
+This dimension is then taken apart and the process repeated. This leads to
+statement \ref{thm:subtracao}.
+
+\begin{mathstatement}
+	\label{thm:subtracao}
+	In a subtraction of two regions, the maximum number of regions generated is
+	the number of fields considered doubled: $|A-B|=2c$.
+\end{mathstatement}
+
+This leads to the fact that the leaf that is ``out'' of every rule will have at
+most $(2c)^r$ regions, and the leaf ``in'' every rule will have only one region
+in the worst case.
+
+There is also a combination here, as the exponent over $2c$ will appear 
+$\left( \begin{array}{l}r \\ i\end{array} \right)$ times, for $0 < i < r$.
+
+The total number of regions in the leaves becomes:
+\begin{equation}
+	N_{regions\ on\ leaves} = \sum_{i=0}^{r} \left( \begin{array}{l}r \\ i\end{array} \right) (2c)^i
+\end{equation}
+
+Replacing $y=1$ and $x=2c$ in the binomial theorem (equation
+\ref{eq:bintheorem}) gives:
+\begin{equation}
+	\label{eq:leavesRegionTotal}
+	N_{regions\ on\ leaves} = (2c+1)^r=\sum_{i=0}^{r} \left( \begin{array}{l}r \\ i\end{array} \right) (2c)^i
+\end{equation}
+
+Equations \ref{eq:worstCaseTreeNodes} and \ref{eq:leavesRegionTotal} are summarized in
+statement \ref{thm:treeWorstCase}.
+
+\begin{mathstatement}
+	\label{thm:treeWorstCase}
+	The total number of inner nodes in the tree of rules is $2^r-1$, with
+	at most $2^r$ leaves, summing up to $2^{r+1}-1$ nodes in the worst
+	case.
+
+	The total number of regions in the leaves of the tree of rules is $(2c+1)^r$
+	in the worst case. They make the set of all the disjoint regions for the
+	filter where different rules apply.
+\end{mathstatement}
+
+To add a new rule in the tree it is necessary to process all nodes and all
+regions of all leaves. To get the complexity of such process, it is necessary to
+multiply the number of nodes and regions by the number of rules ($2c+1>2$ given):
+\begin{equation}
+	complexity_{time} = r(2^r-1 + (2c+1)^r) \in O(r(2c+1)^r)
+\end{equation}
+
+The memory is in the order of the size of the tree (nodes plus regions) and the
+depth of the tree to hold the stack:
+\begin{equation}
+	complexity_{space} = (2c+1)^r + 2^{r+1} \in O((2c+1)^r)
+\end{equation}
+
+To build the equivalent filter set from the tree, the complexity in time is the
+number of nodes, and in space is the size of the resulting set plus the depth of
+the tree (stack). This leads to the statement \ref{thm:filtequivO}.
+
+\begin{mathstatement}
+	\label{thm:filtequivO}.
+	The set of equivalent filter construction complexity is $O(r (2c)^r)$ in
+	time and $O((2c+1)^r)$ in space.
+\end{mathstatement}
+
+
+\subsubsection{Complexity, average case}
+
+The worst case analysed happens when every rule is correlated with every other,
+and none is invisible. That is unreal for the following reasons:
+
+\begin{itemize}
+	\item The IP addresses are usually defined through network masks, and that
+		makes it impossible to define two correlated ranges of addresses.
+	\item Rules that use ports usually do not use ranges.
+\end{itemize}
+
+With that in mind, it is worth doing an analysis of an ``average case'', that
+considers the worst case when the relation of correlation is not allowed, thus
+yielding a more realistic result.
+This case happens when all rules are nested and none
+is invisible. Depending on the targets of the rules, this filter may even have
+no anomalies.
+This case suggests the addition of rules in the opposite order that they are
+defined in the filter, as that prevents the duplication of rules, as every rule
+added will be ``in'' every previous rule. An example of a simple average case
+filter can be seen in figure
+\ref{fig:mediocaso4arvore}.
+
+\begin{figure}
+	\centering
+	\imagescale{.3}{mediocaso4.pdf}
+	\caption{\label{fig:mediocaso4arvore}Tree of rules of the average case with
+	4 rules.}
+\end{figure}
+
+The number of inner nodes of the tree is $r+1$, and the number of leaves is also
+$r+1$. So, the total number of nodes is $2r+2$.
+
+From statement \ref{thm:subtracao}, it is known that the number of regions
+created in the subtraction of two regions is $2c$. In this case, every leaf
+has only one ``out'' edge, and that is in the last edge. This way, the total number
+of regions in the leaves is $2cr+1$.
+
+\begin{mathstatement}
+	The number of equivalent filters for the average case is equal to the number
+	of rules.
+\end{mathstatement}
+
+Again, to add a new rule it is necessary to process every previous rule. The
+complexity of such operation is in the order of $r$ multiplied by the number of
+rules to add, that is, $r^2$.
+
+In memory, the complexity is the size of the tree ($r+1$ internal nodes plus
+$2cr+1$ regions on the leaves) and the stack. The stack has the size in the
+order of the number $r$ of rules in the tree.
+
+\begin{mathstatement}
+	The construction of the set of equivalent filters has complexity $O(r^2)$ on
+	time and $O(r)$ on space for the average case.
+\end{mathstatement}
+
+
+
+\subsection{Invisibility}
+
+\index{invisibility!algorithm}
+
+The analysis of invisibility is simple. The checker collects every rule on top
+of every equivalent filter, and each rule appearing on the original filter and
+not appearing in the collection is marked as invisible. Algorithm
+\ref{alg:invisibilidade} details the process.
+
+\begin{algorithm}
+	\caption{\label{alg:invisibilidade}Invisibility analysis}
+	\begin{algorithmic}[1]
+		\Function{invisibilityAnomaly}{$originalFilter, equivalentFilters$}
+			\State $visible \gets \emptyset$
+			\State $invisible \gets \emptyset$
+				\ForAllIn{$filter$}{$equivalentFilters$}
+				\State $visible \gets visible \cup \{filter[0]\}$
+			\EndFor
+				\ForAllIn{$rule$}{$originalFilter$}
+				\If {$rule \not\in visible$}
+					\State $invisible \gets invisible \cup \{rule\}$
+				\EndIf
+			\EndFor
+			\State \Return $invisible$
+		\EndFunction
+	\end{algorithmic}
+\end{algorithm}
+
+Using a binary tree as the data structure for sets
+($O(\log_2{n})$ insertion and $O(\log_2{n})$ search), the order of the second
+loop becomes insignificant and the complexity is dominated by the first.
+
+\begin{mathstatement}
+	The algorithm of invisibility analysis has, for the worst case,
+	$O(N_{equivalent\ filters} \log_2{r})$ in time and $O(r)$ in space. This
+	happens when there are no invisible rules.
+\end{mathstatement}
+
+The worst case for invisibility analysis is very common, in contrast with the
+worst case for equivalent filters.
+This must be the first analysis performed, as its output are used as inputs for
+the following.
+
+
+\subsection{Conflict}
+
+\index{conflict!algorithm}
+
+For the conflict analysis, it is enough to check the rule on top of every
+equivalent filter against the ones below it. That is the same as checking every
+rule against the rules that have lower priority, are not completely disjoint and
+do not have a rule as a subset defining the target for a conflicting region.
+Details can be seen in algorithm \ref{alg:conflito}.
+
+\begin{algorithm}
+	\caption{\label{alg:conflito}Conflict analysis}
+	\begin{algorithmic}[1]
+		\Function{conflictAnomaly}{$equivalentFilters, invisibles$}
+			\State $conflicts \gets \emptyset$
+				\ForAllIn{$filter$}{$equivalentFilters$}
+				\State $filter \gets filter - invisibles$
+				\State $conflicts \gets conflicts \cup \Calll{equivalentFilterConflicts}{filter}$
+			\EndFor
+			\State \Return $conflicts$
+		\EndFunction
+		\State
+		\Function{equivalentFilterConflicts}{$filter$}
+			\State $conflicts \gets \emptyset$
+			\State $top \gets filter[0]$
+				\ForAllIn{$rule$}{$filter[1..]$}
+				\If {$top_{target} \not= rule_{target} \wedge top \not\subset rule$}
+					\State $conflicts \gets conflicts \cup \{(top, rule)\}$
+				\EndIf
+			\EndFor
+			\State \Return $conflicts$
+		\EndFunction
+	\end{algorithmic}
+\end{algorithm}
+
+The external loop of the algorithm is run for every equivalent filter. The inner
+loop can be run at most $r-1$ times. The maximum number of conflicts in a filter
+is the number of pairs of rules:
+\begin{equation}
+	N_{conflicts} = \left( \begin{array}{ll} r \\ 2 \end{array} \right) = \frac{r(r-1)}{2} \in O(r^2)
+\end{equation}
+
+Taking the implementation of the set $conflicts$ as a chained list that has
+$O(1)$ for union (holds a pointer to the last element), the complexity of the
+algorithm in time becomes $O(N_{equivalent\ filters} (r-1))$. If a post-processing
+is done to avoid duplicate results, this post-processing will dominate and the
+algorithm will be $O(c\log_{2}c) = O(r^2\log_{2}r)$ in time. In space, the
+algorithm holds only the set of results, and as such as complexity $O(r)$.
+
+
+
+\subsection{Redundancy}
+
+\index{redundancy!algorithm}
+
+The redundancy is the last anomaly to be checked. Like the invisibility anomaly,
+the first step is to find the rules that are necessary in the filter. Any rule
+that is not necessary is reported as redundant.
+
+For every equivalent filter, the first rule is tested. It is put in the
+necessary set if its removal changes
+the target of the equivalent filter or generates a conflict.
+
+After all equivalent filters  are processed, the rules that are not necessary
+raise redundancies.
+
+The details can be seen in algorithm \ref{alg:redundancia}.
+
+\begin{algorithm}
+	\caption{\label{alg:redundancia}Redundancy analysis}
+	\begin{algorithmic}[1]
+		\Function{redundancyAnomaly}{$allRules, equivalentFilters, invisibles$}
+			\State $necessary \gets \emptyset$
+			\ForAllIn{$filter$}{$equivalentFilters$}
+				\State $filter \gets filter - invisibles$
+				\If {\Calll{ruleTopIsNecessary}{$filter$}}
+					\State $necessary \gets necessary \cup \{filter[0]\}$
+				\EndIf
+			\EndFor
+			\State $redundant \gets \emptyset$
+			\ForAllIn{$rule$}{$allRules$}
+				\If {$rule \not\in necessary$}
+					\State $redundant \gets redundant \cup \{rule\}$
+				\EndIf
+			\EndFor
+			\State \Return $redundant$
+		\EndFunction
+		\State
+		\Function{ruleTopIsNecessary}{$filter$}
+			\If {$filter[0]_{target} \not= filter[1]_{target}$}
+				\State \Return \True
+			\EndIf
+			\If {$|$\Calll{equivalentFilterConflicts}{$filter[1..]$}$| > 0$}
+				\State \Return \True
+			\EndIf
+			\State \Return \False
+		\EndFunction
+	\end{algorithmic}
+\end{algorithm}
+
+This algorithm makes, for every equivalent filter, either an analysis of
+conflicts or the processing of the filter rules. Both have the same complexity,
+so the algorithm has $O(N_{equivalent\ filters} (r-1))$ in time. In space, the
+algorithm holds the set of defining rules for each filter. That can be,
+potentially, the whole filter. That results in $O(N_{equivalent\ filters} r)$ in
+space.
+
+
+% vim: spelllang=en
+

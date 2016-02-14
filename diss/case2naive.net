@@ -1,0 +1,66 @@
+alias Users     10.0.0.0/24
+alias MainS     10.1.0.0/24
+alias ITS       10.1.1.0/24
+alias Internal  10.0.0.0/8
+alias All       0.0.0.0/0
+
+alias webS     10.1.1.2
+alias mailS    10.1.1.3
+alias fileS    10.1.1.4
+alias proxyS   10.1.1.4
+
+({[
+{
+	filter InternetF,
+	[ {ITS}, {internet} ],
+	[
+	{ rule Mail             , src All    , dst mailS:23 , Accept },
+	{ rule Web              , src All    , dst webS:80  , Accept },
+	{ rule NoProxy2Internal , src proxyS , dst Internal , Deny   },
+	{ rule ProxyA           , src proxyS , dst All      , Accept },
+	{ rule Default          , src All    , dst All      , Deny   },
+	]
+},
+{
+	filter ITUsersF,
+	[ {ITS}, {Users} ],
+	[
+	{ rule Mail             , src All    , dst mailS:23 , Accept },
+	{ rule Web              , src All    , dst webS:80  , Accept },
+	{ rule NoProxy2Internal , src proxyS , dst Internal , Deny   },
+	{ rule ProxyA           , src proxyS , dst All      , Accept },
+	{ rule Users2File       , src Users  , dst fileS    , Accept },
+	{ rule Default          , src All    , dst All      , Deny   },
+	]
+},
+{
+	filter InternalF,
+	[ {Users}, {MainS} ],
+	[
+	{ rule NoServer2Mail    , src MainS  , dst mailS:23 , Deny   },
+	{ rule NoServer2Web     , src MainS  , dst webS:80  , Deny   },
+	{ rule Mail             , src All    , dst mailS:23 , Accept },
+	{ rule Web              , src All    , dst webS:80  , Accept },
+	{ rule NoProxy2Internal , src proxyS , dst Internal , Deny   },
+	{ rule ProxyA           , src proxyS , dst All      , Accept },
+	{ rule Users2Main       , src Users  , dst MainS    , Accept },
+	{ rule Users2File       , src Users  , dst fileS    , Accept },
+	{ rule Default          , src All    , dst All      , Deny   },
+	]
+},
+]},
+{
+	[
+	{ assert Users2Proxy     , src Users  , dst proxyS:3180 , Accept },
+	{ assert Users2MainS     , src Users  , dst MainS       , Accept },
+	{ assert Users2Mail      , src Users  , dst webS:80     , Accept },
+	{ assert Users2Web       , src Users  , dst mailS:23    , Accept },
+	{ assert Users2File      , src Users  , dst fileS       , Accept },
+	{ assert NoMailStart     , src mailS  , dst All         , Deny   },
+	{ assert NoWebStart      , src webS   , dst All         , Deny   },
+	{ assert NoFileStart     , src fileS  , dst All         , Deny   },
+	{ assert NoProxyInternal , src proxyS , dst Internal    , Deny   },
+	{ assert NoServerStart   , src MainS  , dst All         , Deny   },
+	]
+})
+

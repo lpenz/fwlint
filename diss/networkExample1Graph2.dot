@@ -1,0 +1,9 @@
+digraph {
+	rankdir=LR
+	edge [ dir="none" ]
+	node [ shape="record" ]
+	router1 -> router2 [ label="196.168.0.0/24" ]
+	router1 [ label="Router 1 | 10.0.0.0/24\n10.0.1.0/24\n10.0.2.0/24" ]
+	router2 [ label="Router 2 | 10.1.0.0/24\n10.1.1.0/24\n10.1.2.0/24" ]
+}
+

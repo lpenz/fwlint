@@ -1,0 +1,24 @@
+alias Users     10.0.0.0/24
+alias MainS     10.1.0.0/24
+alias ITS       10.1.1.0/24
+alias Internal  10.0.0.0/8
+alias All       0.0.0.0/0
+
+alias webS     10.1.1.2
+alias mailS    10.1.1.3
+alias proxyS   10.1.1.4
+alias fileS    10.1.1.5
+
+[
+{
+    filter Filter,
+	[ {ITS}, {internet} ],
+    [
+	{ rule rule1   , src All    , dst mailS:23 , Accept },
+	{ rule rule2   , src All    , dst webS:80  , Deny },
+	{ rule rule3   , src proxyS , dst All      , Accept },
+	{ rule Default , src All    , dst All      , Deny   },
+	]
+}
+]
+

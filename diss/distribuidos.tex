@@ -1,0 +1,711 @@
+
+\section{Introduction}
+
+This chapter shows the distributed component of PFC. As the chapter
+that described the isolated analysis, it is structured as
+follows: first the requirements are gathered, then the model is developed along
+with the definition of anomalies and, at last, the algorithms are presented.
+
+
+
+\section{Requirements}
+
+\label{sec:req}
+
+The distributed checker is an extension of the isolated checker, and can use
+data provided by it, such as the \emph{tree of rules}.
+
+To avoid redundancies, the distributed checker verifies only anomalies that are
+related in some way to the network topology; the other anomalies are supposed to be
+reported by the isolated checker. This filter sees the filters as ``flat'': it
+does not consider the relations of the rules inside a single filter, nor their
+order, only their effect as it appears to an external viewer.
+
+As input, this checker gets the set of filters with their rules and the network
+topology, along with all the information that the isolated
+checker can provide. As output, it provides the report of anomalies.
+Anomalies are designed to show the administrator the rules that either
+contradict a rule in another filter or are unnecessary,
+verifying consistency and minimalism.
+
+The algorithms should, whenever possible, avoid costs that are a function of the
+number of networks, trying to keep them bound by the number of routing elements
+in the system. The rationale for this is that the number of routers tend to grow
+at a lower rate than the number of networks, as they have a direct monetary
+cost.
+
+
+
+\section{Model}
+
+For the distributed model, three new entities are considered:
+
+\begin{description}
+	\item[networks] {
+		\index{network}
+		The word \emph{network} is used to describe the atomic entity
+		represented by a network prefix that exists on the system.
+
+		A network can be either \defpar[network!]{inner} when it connects two
+		routers, or \defpar[network!]{terminal} otherwise.
+		\begin{equation*}
+			network =
+			\begin{cases}
+				address & \in Addresses \\
+				prefix~length & \in [0-32]
+			\end{cases}
+		\end{equation*}
+		}
+	\item[plain routers] {
+		\index{router!plain}
+		Plain routers are devices with no filter capabilities that connect two
+		or more networks. They are modeled as a set of interfaces. Each
+		interface is composed of an IP address and the connected network.
+		\begin{equation*}
+			interface =
+			\begin{cases}
+				address & \in Addresses \\
+				network & \in Networks
+			\end{cases}
+		\end{equation*}
+		\begin{equation*}
+			router =
+			\begin{cases}
+				interface_1 & \in Interfaces \\
+				interface_2 & \in Interfaces \\
+				interface_3 & \in Interfaces \\
+				...
+			\end{cases}
+		\end{equation*}
+		}
+	\item[filters] {
+		\index{Filters}
+		are routers that forward
+		packets selectively. Filters are programmed with rules and checked for
+		anomalies, while plain routers are not. For the distributed checker,
+		filters also have the set of interfaces in their model.
+		\begin{equation*}
+			filter =
+			\begin{cases}
+				function : Datagrams \rightarrow \{ \mbox{accept}, \mbox{deny} \} \\
+				interface_1 \in Interfaces \\
+				interface_2 \in Interfaces \\
+				interface_3 \in Interfaces \\
+				...
+			\end{cases}
+		\end{equation*}
+		}
+	\item[routers] {
+		\index{router}
+		are used to connect networks. They can be either
+		\emph{filters} or \emph{plain routers}.
+		\begin{equation*}
+			routers = plain~router \vee filter
+		\end{equation*}
+		}
+\end{description}
+
+The system as a whole can be seen as a graph in which the networks (nodes) are
+connected by routers (edges). Cycles in this graph are possible, and happen when
+the network provides alternative routes. This is usually done by the
+administrator to have redundancy and/or load balancing. Any path can be used by
+a packet in the presence of failures, and for this reason, every path between
+two networks is a possible path.
+
+The region algebra of the previous chapter is used as the base for the
+algorithms presented here.
+
+
+
+\section{Network graph}
+
+As presented above, a system of networks can be seen as a graph where the nodes
+are the networks and the edges are the routers.
+
+\begin{figure}
+	\imagefit{networkExample1.pdf}
+	\caption{\label{fig:networkExample1}Example network}
+\end{figure}
+
+\begin{figure}
+	\imagefit{networkExample1Graph1.pdf}
+	\caption{\label{fig:networkExample1Graph1}Graph of the network in
+	figure \ref{fig:networkExample1} with networks as nodes and routers as
+	edges}
+\end{figure}
+
+On the other hand, the number of routers tend to be much smaller than the number
+of networks, for the reasons mentioned in section \ref{sec:req}.  And as a
+router can have many terminal networks attached to it, this approach leads to a
+graph that has more edges and nodes than necessary.  Figure
+\ref{fig:networkExample1} shows an example network, while figure
+\ref{fig:networkExample1Graph1} shows the resulting graph of this approach.
+
+To avert this situation, the model used builds the graph with routers as nodes,
+and the connecting networks as edges. Terminal networks are attached to the node
+of the router they are connected. Figure \ref{fig:networkExample1Graph2}
+shows the result of this improved approach.
+
+\begin{figure}
+	\imagenorm{networkExample1Graph2.pdf}
+	\caption{\label{fig:networkExample1Graph2}Graph of the network in
+	figure \ref{fig:networkExample1} with routers as nodes and inner networks as
+	edges}
+\end{figure}
+
+The number of terminal networks is expected to be greater than the number of
+inner networks. This expectation is reasonable from a security point of view, as
+it is desirable to isolate users and facilities in terminal networks.
+
+If the number of terminal networks is greater than the number of inner networks, the
+number of paths in the graph can be expected to be less than the number of pairs
+of networks, as the number of paths depend only on the number of inner networks,
+while the number of pairs of networks grows also with the number of terminal
+networks. These assumptions influence some choices about the algorithm
+structure, and are summarized in equation \ref{eq:routersLTnettermLTnetinner}
+below.
+\begin{equation}
+	\label{eq:routersLTnettermLTnetinner}
+	|\mbox{routers}| \ll |\mbox{inner nets}| < |\mbox{terminal nets}|
+	\Rightarrow
+	|\mbox{paths}| < |\mbox{nets}|^2
+\end{equation}
+
+
+
+\section{Accessibility profile}
+
+A packet travels the network graph through the routers from its source network
+to its destination network. Each packet can be either forwarded or dropped by each
+filter, depending on the fields of the packet. Every pair of networks has, then,
+an \defpar{accessibility profile} for each filter, that shows the results of the
+filter for each packet that goes from the first network to the second. In other
+words, it is the equivalent filter that considers the region where the source
+address is the first network and the destination address is the second network.
+
+The accessibility profile is the main tool used to check the filters for
+inter-filter consistency, as every path between two networks must present the
+same resulting accessibility profile. Even though the ``accept'' regions of
+the resulting accessibility profile of a path must be ``accept'' in every filter
+traversed, the ``deny'' regions can be defined by any filter of the path.
+Nevertheless, it is more convenient to have all the intended deny regions for a
+network in the nearest filter, as that makes the configuration more local, more
+resilient to topology changes and avoids rule duplication.
+
+For that reason, the \defpar[accessibility!]{correct accessibility profile} is
+assumed to be the one lifted from the first filter found by traversing the graph
+from one network to the other, as the first filter is the one that should have all the
+accept and deny regions configured correctly.
+
+
+
+\section{Anomalies}
+
+The first step of the distributed checker is to find all the isolated anomalies of
+all filters. Each conflict found is then checked to see if their match is
+inside a single interface. If it is, the conflict anomaly is dropped. This is
+only possible in the distributed setting because knowledge of the topology is
+needed.
+
+After that, the distributed anomalies are found. Each anomaly is explained next.
+
+\begin{table}
+	\centering
+	\caption{Summary of the properties provided by the absence of each anomaly:}
+	\begin{tabular}{l|cc}
+		& Consistency  & Minimalism \\
+		\hline
+		Isolated     & conflict                  & invisibility, redundancy \\
+		Distributed  & disagreement, block, leak & irrelevancy \\
+	\end{tabular}
+\end{table}
+
+\subsection{Disagreement anomaly}
+
+When a packet travels from one network to the other, it goes through one or more
+filters. The first filter the packet finds is considered the provider of the
+correct accessibility profile.
+
+But, if the network is not a terminal network connected to a filter, it may be
+possible that there are multiple filters that could be the first filter for a
+packet, as there can be more than one path connecting the two networks. This
+happens not only with inner networks, but also with terminal networks connected to
+routers.
+
+If the accessibility profiles lifted from each of the first filters are not
+equal, the correct profile for the two networks cannot be determined, and a
+disagreement anomaly is reported.
+
+A disagreement anomaly is also reported if the correct accessibility profile is
+not present in the last filter that a packet can find. This design decision was made
+because there are rules that make more sense when coded in the last filter.
+
+Formally:
+\begin{align*}
+	& \exists ~ path_1 \in Paths \\
+	& \exists ~ path_2 \in Paths \\
+	& path_1 \not= path_2 \\
+	& source_{address}(path_1) = source_{address}(path_2) \\
+	& destination_{address}(path_1) = destination_{address}(path_2) \\
+	& \exists ~ datagram \in Datagrams \\
+	& source_{address}(datagram) = source_{address}(path_1) \\
+	& destination_{address}(datagram) = destination_{address}(path_1) \\
+	& action(filter_1(path_1), datagram) \not= action(filter_1(path_2), datagram) \\
+	& \qquad \Rightarrow \mbox{Disagreement}(datagram, filter_1(path_1), filter_1(path_2)) \\
+	& action(filter_1(path_1), datagram) \not= action(filter_n(path_1), datagram) \\
+	& \qquad \Rightarrow \mbox{Disagreement}(datagram, filter_1(path_1), filter_n(path_1))
+\end{align*}
+
+Example:
+
+\input{exdisa.tex}
+
+PFC output:
+
+\verbatiminput{exdisa.res}
+
+\begin{figure}
+	\imagescale{.5}{exdisa_dot.pdf}
+	\caption{\label{fig:exdisa:topo}Topology of the disagreement example.}
+\end{figure}
+
+\begin{figure}
+	\imagefit{exdisa_profile.pdf}
+	\caption{\label{fig:exdisa:profile}Global profile of the disagreement example.}
+\end{figure}
+
+Figure \ref{fig:exdisa:topo} shows the network topology of this example. Figure
+\ref{fig:exdisa:profile} shows a graphical representation of the global
+accessibility profile.
+
+
+
+\subsection{Blocking anomaly}
+
+The accessibility profile is composed by the accept and deny regions of all
+addresses inside both network prefixes and ports.
+
+The absence of disagreements guarantees that all the ``accept'' regions are accepted by
+every filter that can be the first or last filter to be found by a packet traveling from
+one network to the other. But, in order for a packet to effectively reach the
+destination network, the other filters in the path must also accept its passage.
+
+So, if an intermediate filter blocks a subregion of an accept region found in
+the correct accessibility profile, a blocking anomaly is reported.
+
+Formally:
+\begin{align*}
+	& \exists ~ path \in Paths \\
+	& \exists ~ filter \in path \\
+	& \exists ~ datagram \in Datagrams \\
+	& source_{address}(datagram) = source_{address}(path) \\
+	& destination_{address}(datagram) = destination_{address}(path) \\
+	& action(filter_1(path), datagram) = accept ~ \wedge ~ action(filter, datagram) = deny \\
+	& \qquad \Rightarrow \mbox{Block}(datagram, filter)
+\end{align*}
+
+Example:
+
+\input{exblock.tex}
+
+PFC output:
+
+\verbatiminput{exblock.res}
+
+\begin{figure}
+	\imagescale{.5}{exblock_dot.pdf}
+	\caption{\label{fig:exblock:topo}Topology of the blocking example.}
+\end{figure}
+
+Figure \ref{fig:exblock:topo} shows the network topology of this example.
+
+
+
+
+\subsection{Leaking anomaly}
+
+To accept a packet, all filters in the path must accept it. On the other hand,
+to deny a packet, a single denial is enough. If the correct accessibility
+profile denies a packet and there are no disagreements, then it is guaranteed
+that the packet is denied by the first filter it encounters.
+
+In fact, that only happens if there is no path where all connections are
+provided by plain routers. If there is one, then this path provides a
+filter-free way for packets that should not be accepted according to the correct
+accessibility profile.
+
+For this reason, if there is a blocked region in the accessibility profile and
+if there is also a path made only by plain routers for any network in the region, a
+leaking anomaly is reported.
+
+Formally:
+\begin{align*}
+	& \exists ~ path_1 \in Paths \\
+	& \exists ~ path_2 \in Paths \\
+	& path_1 \not= path_2 \\
+	& source_{address}(path_1) = source_{address}(path_2) \\
+	& destination_{address}(path_1) = destination_{address}(path_2) \\
+	& \exists ~ datagram \in Datagrams \\
+	& source_{address}(datagram) = source_{address}(path_1) \\
+	& destination_{address}(datagram) = destination_{address}(path_1) \\
+	& action(filter_1(path_1, datagram) = deny ~ \wedge ~ \lnot\exists ~ filter \in path_2 \\
+	& \qquad \Rightarrow \mbox{Leak}(datagram, path)
+\end{align*}
+
+Example:
+
+\input{exleak.tex}
+
+PFC output:
+
+\verbatiminput{exleak.res}
+
+\begin{figure}
+	\imagescale{.3}{exleak.pdf}
+	\caption{\label{fig:exleak:topo}Topology of the leaking example.}
+\end{figure}
+
+Figure \ref{fig:exleak:topo} shows the network topology of this example.
+
+
+
+\subsection{Irrelevancy anomaly}
+
+The irrelevancy anomaly is reported for every rule that is not necessary in a given
+network topology. It is checked by keeping a set of rules that
+are candidates to irrelevancy, and removing from the set the rules that are
+found to be relevant.
+
+Relevant rules are the rules that either appear on the correct accessibility
+profile or that prevent the blocking anomaly in an intermediate filter. That
+means that after checking for disagreements and blocks, all relevant rules are
+already removed from the candidate set. Therefore, after these verifications,
+all rules left in the candidate set are reported as irrelevant.
+
+That implies that a rule that only blocks packets that are already blocked is
+irrelevant, as is a rule that accepts packets that are blocked.
+
+Formally:
+\begin{align*}
+	& \exists ~ path \in Paths \\
+	& \exists ~ filter \in path \\
+	& \exists ~ rule \in filter \\
+	& \forall ~ datagram \in Datagrams \\
+	& source_{address}(datagram) = source_{address}(path) \\
+	& destination_{address}(datagram) = destination_{address}(path) \\
+	& action(filter, datagram) = action((filter - rule), datagram) \\
+	& \qquad \Rightarrow \mbox{Irrelevant}(rule)
+\end{align*}
+
+
+
+Example:
+
+\input{exirrelevancy.tex}
+
+PFC output:
+
+\verbatiminput{exirrelevancy.res}
+
+\begin{figure}
+	\imagescale{.3}{exirrelevancy_dot.pdf}
+	\caption{\label{fig:exirrelevancy:topo}Topology of the irrelevancy example.}
+\end{figure}
+
+Figure \ref{fig:exirrelevancy:topo} shows the network topology of this example.
+
+
+
+
+It is interesting to note that there is a hierarchy of distributed anomalies. If
+there is a disagreement anomaly, the correct accessibility profile is undefined
+and the other anomalies can't be checked. If there is a blocking anomaly, the
+irrelevancy checking will not be complete and can give false positives.
+
+\begin{figure}
+	\imagenorm{distributedAnomalyHierarchy.pdf}
+	\caption{\label{fig:distributedAnomalyHierarchy}Hierarchy of the distributed
+	anomalies}
+\end{figure}
+
+
+
+
+\section{Algorithms}
+
+The main loop of the algorithm iterates on all possible unique paths that can be
+found in the graph.
+
+\begin{mathstatement}
+	\label{thm:paths}
+	The maximum number of paths happens when every router is connected to every
+	other router by a dedicated network. By using the binomial theorem,
+	we have that the maximum number of paths is
+	$|Paths| = 2^{|Routers|}$.
+
+	The longest path has all the routers, and thus length $|Routers|$.
+\end{mathstatement}
+
+\begin{mathstatement}
+	\label{thm:innernetworks}
+	Every router being connected with every other is also the condition where
+	the maximum number of inner networks is found:
+	$|Networks_{inner}| = |Routers| (|Routers| - 1)$
+\end{mathstatement}
+
+The condition required by these theoretical values is not likely to happen in
+practice for a system with a high number of routers, as every new router added
+to the network would require a connection to every other, and router ports are
+limited.
+
+On the other hand, even though the number of terminal networks is bounded by the
+number of router ports, this bound is an external factor and changes as the
+router market changes. So, in this work, the maximum number of terminal networks
+is not assumed to be bounded by the number of routers, it is only assumed to be
+much greater than it.
+
+With that in mind, there is a matter of balance to be decided. The algorithm has
+to analyse all paths as well as every pair of networks. This raises two options:
+\begin{itemize}
+	\item iterate on all pairs of networks; for each pair, find all connecting
+		paths;
+	\item iterate on all paths; for each path, store information for every
+		network connected by the path.
+\end{itemize}
+
+Equation \ref{eq:routersLTnettermLTnetinner} says that the number of paths is
+expected to be less than the number of pairs of networks. This leads to the
+choice to favor the second option, that sacrifices memory to save time. The
+algorithm, then:
+\begin{enumerate}
+	\item builds the list of paths;
+	\item for all paths, lifts the accessibility profile for every connected
+		network, checks disagreements and blocks and remove the used rules from
+		the irrelevant candidates list;
+	\item all rules left in the list of irrelevant candidates are reported as
+		irrelevant;
+	\item for all paths made only by plain routers, uses the global
+		accessibility profile lifted from the second step to check for leaks.
+\end{enumerate}
+
+Details on every step and their cost are presented next.
+
+
+
+\subsection{List of paths construction}
+
+The algorithm used to build the list of paths is a simple depth-first traversal
+for each node. No optimization reduces the order of this algorithm.
+
+From \cite{mitIntroAlgorithms}, the cost of depth-first traversal is
+$O(|V|\times|E|)$. As the model has the routers as vertices and the inner
+networks as edges, and knowing that the maximum number of inner networks is
+$O(|Routers|^2)$ from statement \ref{thm:innernetworks}, statement
+\ref{thm:listofpaths} summarizes the cost of the process.
+
+\begin{mathstatement}
+	\label{thm:listofpaths}
+	The cost of building the list of paths is the product of the number of nodes
+	multiplied by the cost of the depth-first traversal:
+
+	$\mbox{cost(DFT)} \in O(|Routers|\times|V|\times|E|) = O(|Routers|\times|Routers|\times|Routers|^2)$
+
+	$\mbox{cost(DFT)} \in O(|Routers|^4)$
+\end{mathstatement}
+
+
+
+\subsection{Disagreements, blocks and leaks}
+
+After building the list of paths, the first three anomalies can be checked.
+
+Algorithms \ref{alg:anomdistr}, \ref{alg:buildprof}, \ref{alg:checkonepath} and
+\ref{alg:findleaks} form a high-level representation of the checking. The
+algorithms lack features such as proper report of anomalies with the rules
+involved, skipping of already reported anomalies and language-specific
+optimizations.
+
+
+
+\subsubsection{Complexity}
+
+The cost of building the profile (algorithm \ref{alg:buildprof})
+unfortunately depends on the number of networks attached to the router, and that
+is unavoidable. The profile has all the intersecting regions of the first
+filter's rule with the networks present in the first router as source and the
+networks present in the last routers as destination.
+
+It is known from statement \ref{thm:treeWorstCase} that the maximum number of
+disjoints regions in a filter is $(2c + 1)^r$ in the worst case. It is enough
+to take the intersection from each network with each of these regions. Therefore, 
+the number of regions in the correct accessibility profile for a single path is in
+$O(|\mbox{networks in first router}| \times |\mbox{networks in last router}| \times (2c+1)^r)$
+in the worst case, where $r$ is the number of rules in the first filter.
+
+If every router has the same number of ports and the ports are all in use (worst
+case), then the number of networks in each router is the same number $n$.
+Theorem \ref{thm:profilesize} summarizes the conclusion reached with this
+assumption:
+
+\begin{mathstatement}
+	\label{thm:profilesize}
+	The number of region in the correct accessibility profile for each path is in
+	\[O\left(n^2 \times (2c+1)^r\right)\]
+	
+	That is also the time and space cost of building the profile.
+\end{mathstatement}
+
+The cost of checking one path is in
+$O(|\mbox{routers in path}| \times \mbox{profile size of path})$. In the worst
+case, every router is connected to every other, and the number of routers in
+each
+path is equal to the number of routers, leading to statement \ref{thm:onepath}:
+
+\begin{mathstatement}
+	\label{thm:onepath}
+	The cost of checking one path is, in the worst case
+	\[O\left(|\mbox{Routers}| \times n^2 \times (2c+1)^r\right)\]
+	
+	The process has no space requirements of its own, though, requiring only the
+	profile to be present.
+\end{mathstatement}
+
+Another implication of having every router connected to every other router is
+that the number of paths is in $O\left(2^{|\mbox{Routers}|}\right)$. Joining
+this fact with statements \ref{thm:paths}, \ref{thm:profilesize}, and
+\ref{thm:onepath} we get to statement \ref{thm:concl}:
+
+\begin{mathstatement}
+	\label{thm:concl}
+	The cost in time of checking all paths can be determined
+	to be, in the worst case:
+	\[O\left(|Routers| \times 2^{|Routers|} n^2 (2c+1)^r\right)\]
+
+	The cost in memory is the cost of the list of paths plus the cost of one
+	profile, and that is $O\left(2^{|Routers|} + n^2 (2c+1)^r\right)$.
+\end{mathstatement}
+
+The cost in memory will be dominated by the second parcel most of the time, as
+the tendency is to have a few routers with many rules and networks because of
+the monetary cost of routers.
+
+\begin{algorithm}
+	\caption{\label{alg:anomdistr}Find distributed anomalies}
+	\begin{algorithmic}[1]
+		\Function{checkDistributedAnomalies}{}
+			\State $paths \gets $list of paths
+			\State $profile_{global} \gets \emptyset$
+			\State $rules_{leak~candidates} \gets $ all rules of all filters
+			\ForAllIn{$path$}{$paths$}
+				\State $\Calll{buildProfilePath}{path}$
+			\EndFor
+			\ForAllIn{$rule$}{$rules_{leak~candidates}$}
+				\State Report irrelevant rule
+			\EndFor
+			\ForAllIn{$path$}{$paths$}
+				\State $\Calll{findLeaksInPath}{paths}$
+			\EndFor
+		\EndFunction
+	\end{algorithmic}
+\end{algorithm}
+
+\begin{algorithm}
+	\caption{\label{alg:buildprof}Building the profile for a path}
+	\begin{algorithmic}[1]
+		\Function{buildProfileForPath}{$path$}
+			\State $router_{first} \gets $ first router of $path$
+			\State $router_{last} \gets $ last router of $path$
+			\State $filter_{first} \gets $ first filter of $path$
+			\State $filter_{last} \gets $ last filter of $path$
+			\ForAllIn{$network_1$}{$router_{first}$}
+				\ForAllIn{$network_2$}{$router_{last}$}
+					\State $networks \gets (network_1, network_2)$
+					\State Remove all rules in $filter_{first} \cap networks$ from $rules_{leak~candidates}$
+					\State Remove all rules in $filter_{last} \cap networks$ from $rules_{leak~candidates}$
+					\State $profile \gets profile_{global} \cap networks$
+					\If{$profile = \emptyset$}
+						\State $profile \gets filter_{first} \cap networks$
+						\State $profile_{global} \gets profile_{global} \cup profile$
+					\EndIf
+					\State $\Calll{buildProfileForPathNetworks}{path, networks, profile}$
+				\EndFor
+			\EndFor
+		\EndFunction
+	\end{algorithmic}
+\end{algorithm}
+
+\begin{algorithm}
+	\caption{\label{alg:checkonepath}Builds the profile for a pair of networks}
+	\begin{algorithmic}[1]
+		\Function{buildProfileForPathNetworks}{$path, networks, profile$}
+			\ForAllIn{$filter$}{\{ first and last filters of path \}}
+				\If {$filter \cap networks \not= profile$}
+					\State Report disagreement
+				\EndIf
+			\EndFor
+			\ForAllIn{$profile_{region}$}{$profile$}
+				\If{target of $profile_{region}$ is accept}
+					\ForAllIn{$filter$}{$path$}
+						\State $filter_{region} \gets filter \cap profile_{region}$
+						\State Remove all rules in $filter_{region}$ from $rules_{leak~candidates}$
+						\If{target of $filter_{region}$ is not accept}
+							\State Report block
+						\EndIf
+					\EndFor
+				\EndIf
+			\EndFor
+		\EndFunction
+	\end{algorithmic}
+\end{algorithm}
+
+\begin{algorithm}
+	\caption{\label{alg:findleaks}Leak finding}
+	\begin{algorithmic}[1]
+		\Function{findLeaksInPath}{$path, profile$}
+			\If{all routers of $path$ are plain}
+				\If{there is a deny region in $profile$}
+					\State Report leak
+				\EndIf
+			\EndIf
+		\EndFunction
+	\end{algorithmic}
+\end{algorithm}
+
+
+
+
+\subsection{Irrelevancies}
+
+As all relevant rules are removed from the list of candidates while checking
+disagreements and blocks, the irrelevancy checks in fact only reports the rules
+that are still in the list. This has minimal memory and time cost, if the number
+of irrelevant rules are small.
+
+The absence of irrelevant rules testify the minimality of the rules in the
+filters.
+
+
+
+\section{The Internet}
+
+There is a special case in the filter analysis that corresponds to the internet.
+
+When the system administrator defines a network interface of a router as
+connected to the internet, the checker does two things: first, it considers
+every network that is not present anywhere else in the topology as connected to
+that interface. Secondly, even if there are many internet connections, the
+checker does not consider any path that has such interface as an edge. That is
+justified by the fact that the network administrator will probably never have
+internal packets travel from one edge of his network to the other using an
+external connection.  The internet is modelled as a network interface that is
+connected to every network that is not present in the system.
+
+These considerations are not present in the shown algorithms because they are
+made mostly as a pre-processing stage and as a verification in the list of paths
+construction, that is also not shown.
+
+
+
+
+% vim: ft=tex spelllang=en
+

@@ -1,0 +1,19 @@
+Usage examples for custom tools
+Leandro Penz
+
+
+Put the following on your ``SConstruct`` file:
+
+```
+env = Environment(tools = ['default', 'dot', 'txt2tags'], toolpath = ['../sconstools'])
+```
+
+To use, just:
+
+```
+env.DOT('test.png', 'test.dot')
+env.TXT2TAGS('test1.html','test1.t2t')
+```
+
+
+

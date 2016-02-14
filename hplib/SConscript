@@ -1,0 +1,54 @@
+
+Profile = False
+
+import glob
+import os
+import re
+import sets
+
+execfile(os.path.join(os.environ['SCONSTOOLS'], 'utils.py'))
+
+env = Env()
+
+env['HASKELLPATH'] = os.getcwd()
+
+defaultTargets = []
+
+if Profile:
+    env['HASKELLFLAGS'] = env['HASKELLFLAGS'] + ' -prof -auto-all -DPROFILE'
+
+env['HASKELLFLAGS'] = env['HASKELLFLAGS'] + ' -XOverlappingInstances -XIncoherentInstances'
+
+hsTest = []
+
+prop_re = re.compile(r'^(prop_[^ =]+).*', re.M)
+module_re = re.compile(r'^\s*module\s+(\S+)', re.M)
+
+for filename in glob.glob('*.hs'):
+    if filename == 'quickchecker.hs':
+        continue
+    node = env.File(filename)
+    contents = node.get_contents()
+    if prop_re.findall(contents):
+        new = newext(filename)
+        if not new in hsTest:
+            hsTest.append(new)
+    env.HASKELL(filename)
+
+#hsTestExt = []
+#for hstest in hsTest:
+#    hsTestExt.append(hstest + '.o')
+#    hsTestExt.append(hstest + '.hi')
+#hsTestHs = []
+#for hstest in hsTest:
+#    hsTestHs.append(hstest + '.hs')
+#env.Command('quickchecker.hs', hsTestExt, r"""
+#echo "module Main where" > $TARGET
+#for i in """ + ' '.join(hsTest) + r"""; do echo "import $$i" >> $TARGET; done
+#echo -e "import Test.QuickCheck\nmain :: IO ()\nmain =\n\tdo" >> $TARGET
+#TMP=$$(tempfile); for i in $$(sed -nr 's/^(prop_[^ =]+).*/\1/p' """ + ' '.join(hsTestHs) + r"""); do echo -e "\tputStrLn \"$$i\" >> quickCheck $$i" >> $$TMP; done; sort -u $$TMP >> $TARGET
+#""")
+#makeHs('quickchecker.hs')
+
+#env.Command('test_results.txt', 'quickchecker', './quickchecker | tee $TARGET')
+

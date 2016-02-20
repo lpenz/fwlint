@@ -8,7 +8,7 @@ env = Env()
 
 import subprocess
 
-revno = '9999'
+revno = 'final'
 env.Command('revno.tex', [], 'echo '+revno+' > $TARGET')
 
 products = [ 'diss', 'isoladosArtigo', 'distribuidosArtigo', 'casestudyArtigo' ]
@@ -82,6 +82,4 @@ doallCommand('../fwc/net_checker', '.net', '.res')
 doallCommand('./grepaliases', '.net', '_aliases.tex')
 doallCommand('../fwc/net_globalprofile_svg', '.net', '_profile.svg')
 doallCommand('../fwc/net_ruletree_dot', '.net', '_ruletree.dot')
-env.Command('ppgcvista.pdf', 'ppgcvista.pdf.gz', 'gunzip -c $SOURCE > $TARGET')
-env.Depends('diss.pdf', 'ppgcvista.pdf')
 

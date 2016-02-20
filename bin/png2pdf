@@ -1,0 +1,9 @@
+#!/bin/sh
+
+TMP=$(tempfile --suffix=.pdf)
+convert $1 $TMP
+RV=$?
+cat $TMP
+rm -f $TMP
+exit $RV
+

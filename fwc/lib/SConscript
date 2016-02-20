@@ -29,7 +29,7 @@ for filename in glob.glob('*.hs'):
     hsList.append(filename)
     env.HASKELL(filename)
 
-env.Command('quickchecker.hs', hsList, '../haskelltester $TARGET $SOURCES')
+env.Command('quickchecker.hs', hsList, 'haskelltester $TARGET $SOURCES')
 
 env.HASKELL_EXECUTABLE('quickchecker.hs')
 

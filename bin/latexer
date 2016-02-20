@@ -1,0 +1,161 @@
+#!/bin/bash
+
+function usage () {
+	cat <<-EOF
+	Usage: $0 [-v] [-p] [-k] <tex file>
+	       $0 <-h>
+	Generates dvi or pdf from latex file.
+
+	-v          Be verbose
+	-p          Generate PDF. DVI is the default.
+	-k          Keep tex files (aux, toc and log).
+	-h          This help message.
+	<tex file>  File to process.
+	EOF
+}
+
+TEXER=latex
+
+while getopts ":vkpth" opt; do
+   case $opt in
+   v )  VERBOSE=1;;
+   p )  TEXER=pdflatex;;
+   k )  KEEP=1;;
+   t )  FROMT2T=1;;
+   h )  usage; exit 0;;
+   \?)  usage; exit 1;;
+   esac
+done
+
+shift $(($OPTIND - 1))
+
+if [ "$#" != "1" ]; then
+	echo "Wrong number of arguments."
+	usage
+	exit 1
+fi
+
+FILEIN=$1
+BASENAME=$(basename $FILEIN .tex)
+RV=0
+
+cd $(dirname $FILEIN)
+FILEIN=$(basename $FILEIN)
+
+if [ "$TEXER" == "pdflatex" ]; then
+	FILEOUT=$BASENAME.pdf
+else
+	FILEOUT=$BASENAME.ps
+fi
+
+if [ -n "$FROMT2T" ]; then
+	if [ "$TEXER" == "pdflatex" ]; then
+		sed -i 's/\\includegraphics{\([^.]\+\)}/\\includegraphics{\1.pdf}/' $FILEIN
+		sed -i 's/\\includegraphics{\([^.]\+\)\.eps}/\\includegraphics{\1.pdf}/' $FILEIN
+	else
+		sed -i 's/\\includegraphics{\([^.]\+\)}/\\includegraphics{\1.eps}/' $FILEIN
+		sed -i 's/\\includegraphics{\([^.]\+\)\.pdf}/\\includegraphics{\1.eps}/' $FILEIN
+	fi
+fi
+
+if ! grep '\\title' $FILEIN > /dev/null; then
+	sed -i -e '/\\begin{document}/i\\\\m{}title{}' $FILEIN
+	sed -i -e 's/m{}title{}/title{}/' $FILEIN
+fi
+
+if ! grep '\\author' $FILEIN > /dev/null; then
+	sed -i -e '/\\begin{document}/i\\\\m{}author{}' $FILEIN
+	sed -i -e 's/m{}author{}/author{}/' $FILEIN
+fi
+
+rm -f $FILEOUT
+
+function showfile {
+	cat $1 | sed -e "s@^l\.\([0-9]\+\)@$FILEIN:\1:@" | colorize -R '^!.*' -Y 'LaTeX.Warning:.*' 
+}
+
+TMPINPUTS=`mktemp`
+TMPPREVINPUTS=`mktemp`
+echo $FILEIN > $TMPINPUTS
+while ! diff -q $TMPINPUTS $TMPPREVINPUTS > /dev/null; do
+	cp $TMPINPUTS $TMPPREVINPUTS
+	cat $TMPINPUTS | while read input; do
+		sed -n 's/.*\\input{\(\S\+\)}.*/\1/p' $input >> $TMPINPUTS
+	done
+	sort -u $TMPINPUTS -o $TMPINPUTS
+done
+
+TMPFILE=`mktemp ./latex.tmp.XXXXXX`
+
+function rmfiles {
+	rm -f $TMPFILE
+	if [ ! -n "$KEEP" ]; then
+		rm -f $BASENAME.aux $BASENAME.log $BASENAME.out 
+		for i in $inputs; do
+			grep -q '^[ 	]*\\bibliography' $i && rm -f $BASENAME.bbl $BASENAME.blg
+			grep -q '^[ 	]*\\makeindex' $i && rm -f $BASENAME.idx
+			grep -q '^[ 	]*\\printindex' $i && rm -f $BASENAME.ilg $BASENAME.ind
+			grep -q '^[ 	]*\\tableofcontents' $i && rm -f $BASENAME.toc
+			grep -q '^[ 	]*\\documentclass.*{beamer}' $i && rm -f $BASENAME.nav $BASENAME.snm $BASENAME.toc
+			grep -q '^[ 	]*\\listoffigures' $i && rm -f $BASENAME.lof
+			grep -q '^[ 	]*\\listoftables' $i && rm -f $BASENAME.lot
+			grep -q '^[ 	]*\\listofalgorithms' $i && rm -f $BASENAME.loa
+		done
+	fi
+}
+
+function checkrv {
+	RV=$1
+	if [ "$RV" != "0" ]; then
+		showfile $TMPFILE
+		rm -f $FILEOUT $TMPFILE
+		exit $RV
+	fi
+}
+
+for i in 1 2; do
+	echo '\04' | $TEXER --interaction scrollmode $FILEIN > $TMPFILE
+done
+
+inputs=`cat $TMPINPUTS`
+rm -f $TMPINPUTS $TMPPREVINPUTS
+
+for i in $inputs ; do
+	if grep -q '^[ 	]*\\bibliography' $i; then
+		bibtex $BASENAME > $TMPFILE
+		RV=$?
+		checkrv $RV
+	fi
+done
+
+for i in $inputs ; do
+	if grep -q '^[ 	]*\\printindex' $i; then
+		makeindex $BASENAME > $TMPFILE 2>/dev/null
+		RV=$?
+		checkrv $RV
+	fi
+done
+
+if [ "$RV" == "0" ]; then
+	echo '\04' | $TEXER --interaction scrollmode  $FILEIN > $TMPFILE
+	RV=$?
+	while grep Rerun $TMPFILE > /dev/null; do
+		$TEXER --interaction scrollmode $FILEIN > $TMPFILE
+		RV=$?
+	done
+fi
+
+checkrv $RV
+
+if grep -q -i undefined $TMPFILE; then
+	showfile $TMPFILE
+	rm -f $FILEOUT $TMPFILE
+	exit 1
+fi
+
+test -n "$VERBOSE" && showfile $TMPFILE
+
+rmfiles
+
+exit $RV
+

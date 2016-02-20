@@ -1,4 +1,6 @@
 
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+
 module Main where
 import qualified Data.Map as Map
 import qualified Data.List as List
@@ -35,7 +37,7 @@ rulesSvg :: [Rule] -> String
 rulesSvg rules =
 	let
 		xslist = concatMap ( \ (Rule (_, ini, fim, _)) -> [ini, fim]) rules
-		xs = [minimum xslist .. maximum xslist]
+		xs = [(minimum xslist) .. (maximum xslist)]
 		ys = rules
 		cm = concatMap ( \ r@(Rule (_, ini, fim, _)) -> [((x, r), ruleCell r) | x <- [ini .. fim]]) rules
 		mapa = Map.fromList cm

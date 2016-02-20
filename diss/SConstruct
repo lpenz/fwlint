@@ -1,13 +1,14 @@
 
-execfile('/home/lpenz/projs/sconstools/utils.py')
+import os
+
+execfile(os.path.join(os.environ['SCONSTOOLS'], 'utils.py'))
 
 env = Env()
 #env.SConscript('../fwc/SConscript')
 
 import subprocess
 
-revno = subprocess.Popen(["/bin/sh", "-c", "darcs changes | grep -c '^  \*'"], stdout=subprocess.PIPE).communicate()[0]
-revno = revno[0:-1]
+revno = '9999'
 env.Command('revno.tex', [], 'echo '+revno+' > $TARGET')
 
 products = [ 'diss', 'isoladosArtigo', 'distribuidosArtigo', 'casestudyArtigo' ]

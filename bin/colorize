@@ -1,0 +1,70 @@
+#!/bin/bash
+
+STR=
+
+while getopts ":r:g:b:y:m:c:w:R:G:B:Y:M:C:W:" opt; do
+   case $opt in
+   r )  STR="$STR -e s/\($OPTARG\)/[31m\\1[0m/g";;
+   R )  STR="$STR -e s/\($OPTARG\)/[31;1m\\1[0m/g";;
+   g )  STR="$STR -e s/\($OPTARG\)/[32m\\1[0m/g";;
+   G )  STR="$STR -e s/\($OPTARG\)/[32;1m\\1[0m/g";;
+   b )  STR="$STR -e s/\($OPTARG\)/[34m\\1[0m/g";;
+   B )  STR="$STR -e s/\($OPTARG\)/[34;1m\\1[0m/g";;
+   y )  STR="$STR -e s/\($OPTARG\)/[33m\\1[0m/g";;
+   Y )  STR="$STR -e s/\($OPTARG\)/[33;1m\\1[0m/g";;
+   m )  STR="$STR -e s/\($OPTARG\)/[35m\\1[0m/g";;
+   M )  STR="$STR -e s/\($OPTARG\)/[35;1m\\1[0m/g";;
+   c )  STR="$STR -e s/\($OPTARG\)/[36m\\1[0m/g";;
+   C )  STR="$STR -e s/\($OPTARG\)/[36;1m\\1[0m/g";;
+   w )  STR="$STR -e s/\($OPTARG\)/[37m\\1[0m/g";;
+   W )  STR="$STR -e s/\($OPTARG\)/[37;1m\\1[0m/g";;
+   h )  usage; exit 0;;
+   \?)  usage; exit 1;;
+   esac
+done
+
+shift $(($OPTIND - 1))
+
+# cyan
+if [ -n "$1" ]; then
+	STR="$STR -e s/\($1\)/[36m\\1[0m/g"
+fi
+
+# green
+shift
+if [ -n "$1" ]; then
+	STR="$STR -e s/\($1\)/[32m\\1[0m/g"
+fi
+
+# magenta
+shift
+if [ -n "$1" ]; then
+	STR="$STR -e s/\($1\)/[35m\\1[0m/g"
+fi
+
+# yellow
+shift
+if [ -n "$1" ]; then
+	STR="$STR -e s/\($1\)/[33m\\1[0m/g"
+fi
+
+# red
+shift
+if [ -n "$1" ]; then
+	STR="$STR -e s/\($1\)/[31m\\1[0m/g"
+fi
+
+# blue
+shift
+if [ -n "$1" ]; then
+	STR="$STR -e s/\($1\)/[34m\\1[0m/g"
+fi
+
+# white
+shift
+if [ -n "$1" ]; then
+	STR="$STR -e s/\($1\)/[37m\\1[0m/g"
+fi
+
+sed -u $STR
+

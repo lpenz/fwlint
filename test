@@ -12,3 +12,8 @@ cd fwc
 scons
 )
 
+(
+cd diss
+scons
+)
+
